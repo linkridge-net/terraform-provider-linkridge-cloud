@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Terraform Plugin Framework provider scaffold for LinkRidge Cloud.
+- `LINKRIDGE_CLOUD_BASE_URL` and `LINKRIDGE_CLOUD_API_TOKEN` configuration
+  fallback.
+- Read-only `linkridgecloud_services` data source for the `/v1/services`
+  control-plane API.
+
 ### Changed
 
 - Updated beta banner to v1 stable
