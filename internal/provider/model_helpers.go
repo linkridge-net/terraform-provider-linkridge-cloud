@@ -29,3 +29,12 @@ func stringSliceValues(values []string) []types.String {
 	}
 	return result
 }
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}

@@ -116,6 +116,54 @@ type ServiceToken struct {
 	ExternalEffectsEnabled bool     `json:"external_effects_enabled"`
 }
 
+// ProvisioningRun is the safe evidence subset of the /v1/provisioning-runs representation exposed by the provider.
+type ProvisioningRun struct {
+	ID                         string                `json:"id"`
+	RunID                      string                `json:"run_id"`
+	AccountID                  string                `json:"account_id"`
+	AccountServiceID           string                `json:"account_service_id"`
+	ServiceID                  string                `json:"service_id"`
+	QRWorkspaceID              string                `json:"qr_workspace_id"`
+	RequestedByUserID          string                `json:"requested_by_user_id"`
+	ApprovedByUserID           string                `json:"approved_by_user_id"`
+	Status                     string                `json:"status"`
+	StartedAt                  string                `json:"started_at"`
+	CompletedAt                string                `json:"completed_at"`
+	PlannedSteps               []string              `json:"planned_steps"`
+	LocalRecordsPrepared       []string              `json:"local_records_prepared"`
+	ExternalWritesBlocked      []string              `json:"external_writes_blocked"`
+	NextRequiredOperatorAction string                `json:"next_required_operator_action"`
+	Result                     ProvisioningRunResult `json:"result"`
+	SourcePacketID             string                `json:"source_packet_id"`
+	ExternalEffectsEnabled     bool                  `json:"external_effects_enabled"`
+}
+
+// ProvisioningRunResult supports file-backed string results and Postgres object results.
+type ProvisioningRunResult struct {
+	Result                string   `json:"result"`
+	ExternalWritesBlocked []string `json:"external_writes_blocked"`
+}
+
+// UnmarshalJSON decodes both "not_executed" and {"result":"not_executed"} shapes.
+func (r *ProvisioningRunResult) UnmarshalJSON(data []byte) error {
+	var result string
+	if err := json.Unmarshal(data, &result); err == nil {
+		r.Result = result
+		return nil
+	}
+
+	var payload struct {
+		Result                string   `json:"result"`
+		ExternalWritesBlocked []string `json:"external_writes_blocked"`
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return err
+	}
+	r.Result = payload.Result
+	r.ExternalWritesBlocked = payload.ExternalWritesBlocked
+	return nil
+}
+
 type servicesResponse struct {
 	Data []Service `json:"data"`
 }
@@ -138,6 +186,10 @@ type qrImportJobsResponse struct {
 
 type serviceTokensResponse struct {
 	Data []ServiceToken `json:"data"`
+}
+
+type provisioningRunsResponse struct {
+	Data []ProvisioningRun `json:"data"`
 }
 
 // NewClient creates a LinkRidge Cloud client.
@@ -337,6 +389,31 @@ func (c *Client) ListServiceTokens(ctx context.Context, accountID string, filter
 	}
 	if result.Data == nil {
 		return []ServiceToken{}, nil
+	}
+
+	return result.Data, nil
+}
+
+// ListProvisioningRuns returns safe provisioning rehearsal and execution evidence. filters are optional.
+func (c *Client) ListProvisioningRuns(ctx context.Context, filters map[string]string) ([]ProvisioningRun, error) {
+	endpoint := c.listEndpoint("/v1/provisioning-runs", filters)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create provisioning runs request: %w", err)
+	}
+	resp, err := c.doJSON(req, "list provisioning runs")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var result provisioningRunsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode provisioning runs response: %w", err)
+	}
+	if result.Data == nil {
+		return []ProvisioningRun{}, nil
 	}
 
 	return result.Data, nil

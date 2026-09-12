@@ -90,8 +90,8 @@ func TestValidateRequiredConfig(t *testing.T) {
 
 func TestProviderRegistersServicesDataSource(t *testing.T) {
 	dataSources := (&LinkRidgeCloudProvider{}).DataSources(context.Background())
-	if len(dataSources) != 6 {
-		t.Fatalf("expected 6 data sources, got %d", len(dataSources))
+	if len(dataSources) != 7 {
+		t.Fatalf("expected 7 data sources, got %d", len(dataSources))
 	}
 }
 
@@ -101,6 +101,15 @@ func TestStringValueOrNull(t *testing.T) {
 	}
 	if got := stringValueOrNull("value"); got.ValueString() != "value" {
 		t.Fatalf("unexpected string value: %q", got.ValueString())
+	}
+}
+
+func TestFirstNonEmpty(t *testing.T) {
+	if got := firstNonEmpty("", "run-id", "fallback"); got != "run-id" {
+		t.Fatalf("unexpected first non-empty value: %q", got)
+	}
+	if got := firstNonEmpty("", ""); got != "" {
+		t.Fatalf("expected empty fallback, got %q", got)
 	}
 }
 

@@ -8,12 +8,14 @@ The first provider slice is intentionally read-only: it configures a
 Terraform Plugin Framework provider, creates a small LinkRidge Cloud API
 client, and exposes the `/v1/services`, `/v1/accounts`, and
 `/v1/accounts/{account_id}/services`, `/v1/accounts/{account_id}/service-tokens`,
-`/v1/qr/workspaces`, and `/v1/qr/workspaces/{workspace_id}/import-jobs` list
-APIs through Terraform data sources. Service-token data is safe metadata only;
-QR import jobs expose plan/review status only; the provider never returns token
-secret material, executes imports, or enables hosted redirects. Draft resources
-will stay plan/dev-only until the LinkRidge Cloud API approval gates, tenant
-isolation, and durable audit contracts are ready for customer-visible effects.
+`/v1/provisioning-runs`, `/v1/qr/workspaces`, and
+`/v1/qr/workspaces/{workspace_id}/import-jobs` list APIs through Terraform data
+sources. Service-token data is safe metadata only; provisioning runs expose
+rehearsal evidence only; QR import jobs expose plan/review status only; the
+provider never returns token secret material, approves provisioning, executes
+imports, or enables hosted redirects. Draft resources will stay plan/dev-only
+until the LinkRidge Cloud API approval gates, tenant isolation, and durable
+audit contracts are ready for customer-visible effects.
 
 <!-- badges-start -->
 [![DevRail compliant](https://devrail.dev/images/badge.svg)](https://devrail.dev)
@@ -52,6 +54,11 @@ data "linkridgecloud_qr_import_jobs" "planned" {
   workspace_id      = "qrw_local_demo"
   status            = "planned"
   import_performed  = false
+}
+
+data "linkridgecloud_provisioning_runs" "rehearsal" {
+  account_service_id = "asvc_local_qr_demo"
+  status             = "rehearsal_only"
 }
 
 data "linkridgecloud_service_tokens" "planned" {

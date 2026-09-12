@@ -426,6 +426,99 @@ func TestListServiceTokensSendsPathAndFilters(t *testing.T) {
 	}
 }
 
+func TestListProvisioningRunsSendsFilters(t *testing.T) {
+	var gotAuth string
+	var gotAccountID string
+	var gotAccountServiceID string
+	var gotServiceID string
+	var gotStatus string
+	var gotSourcePacketID string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		gotAccountID = r.URL.Query().Get("account_id")
+		gotAccountServiceID = r.URL.Query().Get("account_service_id")
+		gotServiceID = r.URL.Query().Get("service_id")
+		gotStatus = r.URL.Query().Get("status")
+		gotSourcePacketID = r.URL.Query().Get("source_packet_id")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(provisioningRunsResponse{
+			Data: []ProvisioningRun{
+				{
+					ID:                         "lpv_local_qr_demo_001",
+					AccountID:                  "acct_local_qr_demo",
+					AccountServiceID:           "asvc_local_qr_demo",
+					ServiceID:                  "qr-codes",
+					QRWorkspaceID:              "qrw_local_demo",
+					RequestedByUserID:          "usr_local_qr_owner",
+					Status:                     "rehearsal_only",
+					PlannedSteps:               []string{"accounts", "qr_workspaces"},
+					LocalRecordsPrepared:       []string{"accounts", "qr_workspaces"},
+					ExternalWritesBlocked:      []string{"billing_customer", "external_qr_redirect"},
+					NextRequiredOperatorAction: "review_local_seed_packet",
+					Result: ProvisioningRunResult{
+						Result:                "not_executed",
+						ExternalWritesBlocked: []string{"billing_customer", "external_qr_redirect"},
+					},
+					SourcePacketID:         "local-qr-starter-demo",
+					ExternalEffectsEnabled: false,
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	client, err := NewClient(ClientConfig{BaseURL: server.URL, APIToken: "dev-token"})
+	if err != nil {
+		t.Fatalf("expected client, got error: %v", err)
+	}
+
+	provisioningRuns, err := client.ListProvisioningRuns(context.Background(), map[string]string{
+		"account_id":         "acct_local_qr_demo",
+		"account_service_id": "asvc_local_qr_demo",
+		"service_id":         "qr-codes",
+		"status":             "rehearsal_only",
+		"source_packet_id":   "local-qr-starter-demo",
+	})
+	if err != nil {
+		t.Fatalf("expected provisioning runs, got error: %v", err)
+	}
+	if gotAuth != "Bearer dev-token" {
+		t.Fatalf("expected bearer token header, got %q", gotAuth)
+	}
+	if gotAccountID != "acct_local_qr_demo" {
+		t.Fatalf("expected account_id filter, got %q", gotAccountID)
+	}
+	if gotAccountServiceID != "asvc_local_qr_demo" {
+		t.Fatalf("expected account_service_id filter, got %q", gotAccountServiceID)
+	}
+	if gotServiceID != "qr-codes" {
+		t.Fatalf("expected service_id filter, got %q", gotServiceID)
+	}
+	if gotStatus != "rehearsal_only" {
+		t.Fatalf("expected status filter, got %q", gotStatus)
+	}
+	if gotSourcePacketID != "local-qr-starter-demo" {
+		t.Fatalf("expected source_packet_id filter, got %q", gotSourcePacketID)
+	}
+	if len(provisioningRuns) != 1 || provisioningRuns[0].ID != "lpv_local_qr_demo_001" {
+		t.Fatalf("unexpected provisioning runs: %#v", provisioningRuns)
+	}
+	if provisioningRuns[0].ExternalEffectsEnabled {
+		t.Fatal("expected provisioning run to report external effects disabled")
+	}
+}
+
+func TestProvisioningRunResultDecodesStringShape(t *testing.T) {
+	var provisioningRun ProvisioningRun
+	if err := json.Unmarshal([]byte(`{"result":"not_executed"}`), &provisioningRun); err != nil {
+		t.Fatalf("expected string result shape to decode: %v", err)
+	}
+	if provisioningRun.Result.Result != "not_executed" {
+		t.Fatalf("unexpected result: %q", provisioningRun.Result.Result)
+	}
+}
+
 func TestListServicesReturnsHTTPError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "nope", http.StatusUnauthorized)
