@@ -371,16 +371,26 @@ type auditEventsResponse struct {
 	Data []AuditEvent `json:"data"`
 }
 
+type problemDetails struct {
+	Type   string `json:"type"`
+	Title  string `json:"title"`
+	Status int    `json:"status"`
+	Detail string `json:"detail"`
+	Code   string `json:"code"`
+}
+
 // NewClient creates a LinkRidge Cloud client.
 func NewClient(cfg ClientConfig) (*Client, error) {
-	if strings.TrimSpace(cfg.BaseURL) == "" {
+	baseURLValue := strings.TrimSpace(cfg.BaseURL)
+	if baseURLValue == "" {
 		return nil, fmt.Errorf("base URL is required")
 	}
-	if strings.TrimSpace(cfg.APIToken) == "" {
+	apiToken := strings.TrimSpace(cfg.APIToken)
+	if apiToken == "" {
 		return nil, fmt.Errorf("API token is required")
 	}
 
-	baseURL, err := url.Parse(strings.TrimRight(cfg.BaseURL, "/"))
+	baseURL, err := url.Parse(strings.TrimRight(baseURLValue, "/"))
 	if err != nil {
 		return nil, fmt.Errorf("parse base URL: %w", err)
 	}
@@ -395,7 +405,7 @@ func NewClient(cfg ClientConfig) (*Client, error) {
 
 	return &Client{
 		baseURL:    baseURL.String(),
-		apiToken:   cfg.APIToken,
+		apiToken:   apiToken,
 		httpClient: httpClient,
 	}, nil
 }
@@ -801,6 +811,7 @@ func (c *Client) listEndpoint(path string, filters map[string]string) string {
 func (c *Client) doJSON(req *http.Request, action string) (*http.Response, error) {
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Authorization", "Bearer "+c.apiToken)
+	req.Header.Set("User-Agent", "terraform-provider-linkridge-cloud")
 
 	resp, err := c.httpClient.Do(req) //nolint:gosec // URL is provider-configured and parsed before use.
 	if err != nil {
@@ -810,8 +821,37 @@ func (c *Client) doJSON(req *http.Request, action string) (*http.Response, error
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		defer func() { _ = resp.Body.Close() }()
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return nil, fmt.Errorf("%s returned HTTP %d: %s", action, resp.StatusCode, strings.TrimSpace(string(body)))
+		return nil, fmt.Errorf("%s returned HTTP %d: %s", action, resp.StatusCode, formatErrorBody(body))
 	}
 
 	return resp, nil
+}
+
+func formatErrorBody(body []byte) string {
+	trimmed := strings.TrimSpace(string(body))
+	if trimmed == "" {
+		return "empty response body"
+	}
+
+	var problem problemDetails
+	if err := json.Unmarshal(body, &problem); err == nil {
+		parts := make([]string, 0, 4)
+		if problem.Title != "" {
+			parts = append(parts, problem.Title)
+		}
+		if problem.Code != "" {
+			parts = append(parts, "code="+problem.Code)
+		}
+		if problem.Detail != "" {
+			parts = append(parts, problem.Detail)
+		}
+		if problem.Type != "" {
+			parts = append(parts, "type="+problem.Type)
+		}
+		if len(parts) > 0 {
+			return strings.Join(parts, "; ")
+		}
+	}
+
+	return trimmed
 }

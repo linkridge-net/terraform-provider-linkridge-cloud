@@ -43,6 +43,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Trim provider base URL and API token values before client use, send a stable
+  provider user-agent, and format LinkRidge problem+json API errors for clearer
+  Terraform diagnostics.
 - Updated beta banner to v1 stable
 
 ## [1.0.0] - 2026-03-01

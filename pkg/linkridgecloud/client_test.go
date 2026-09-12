@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -26,10 +27,12 @@ func TestNewClientValidatesRequiredConfig(t *testing.T) {
 func TestListServicesSendsBearerTokenAndFilter(t *testing.T) {
 	var gotAuth string
 	var gotID string
+	var gotUserAgent string
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotAuth = r.Header.Get("Authorization")
 		gotID = r.URL.Query().Get("id")
+		gotUserAgent = r.Header.Get("User-Agent")
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(servicesResponse{
 			Data: []Service{
@@ -45,7 +48,7 @@ func TestListServicesSendsBearerTokenAndFilter(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := NewClient(ClientConfig{BaseURL: server.URL + "/", APIToken: "dev-token"})
+	client, err := NewClient(ClientConfig{BaseURL: " " + server.URL + "/ ", APIToken: "\ndev-token\n"})
 	if err != nil {
 		t.Fatalf("expected client, got error: %v", err)
 	}
@@ -59,6 +62,9 @@ func TestListServicesSendsBearerTokenAndFilter(t *testing.T) {
 	}
 	if gotID != "qr-codes" {
 		t.Fatalf("expected id filter, got %q", gotID)
+	}
+	if gotUserAgent != "terraform-provider-linkridge-cloud" {
+		t.Fatalf("expected provider user agent, got %q", gotUserAgent)
 	}
 	if len(services) != 1 || services[0].ID != "qr-codes" {
 		t.Fatalf("unexpected services: %#v", services)
@@ -1088,5 +1094,42 @@ func TestListServicesReturnsHTTPError(t *testing.T) {
 
 	if _, err := client.ListServices(context.Background(), ""); err == nil {
 		t.Fatal("expected HTTP error")
+	}
+}
+
+func TestListServicesFormatsProblemError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{
+			"type": "https://cloud.linkridge.net/problems/control-plane-write-scope-missing",
+			"title": "Control-plane write scope missing",
+			"status": 403,
+			"detail": "The token can read this tenant but cannot prepare draft writes.",
+			"code": "control_plane_write_scope_missing"
+		}`))
+	}))
+	defer server.Close()
+
+	client, err := NewClient(ClientConfig{BaseURL: server.URL, APIToken: "dev-token"})
+	if err != nil {
+		t.Fatalf("expected client, got error: %v", err)
+	}
+
+	_, err = client.ListServices(context.Background(), "")
+	if err == nil {
+		t.Fatal("expected HTTP error")
+	}
+	got := err.Error()
+	for _, want := range []string{
+		"list services returned HTTP 403",
+		"Control-plane write scope missing",
+		"code=control_plane_write_scope_missing",
+		"The token can read this tenant but cannot prepare draft writes.",
+		"type=https://cloud.linkridge.net/problems/control-plane-write-scope-missing",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected error %q to contain %q", got, want)
+		}
 	}
 }
