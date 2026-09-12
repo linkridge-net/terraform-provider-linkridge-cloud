@@ -62,6 +62,19 @@ type AccountService struct {
 	ExternalEffectsEnabled bool   `json:"external_effects_enabled"`
 }
 
+// Entitlement is the safe effective entitlement subset exposed by the provider.
+type Entitlement struct {
+	ID                string          `json:"id"`
+	AccountID         string          `json:"account_id"`
+	AccountServiceID  string          `json:"account_service_id"`
+	ServiceID         string          `json:"service_id"`
+	EntitlementKey    string          `json:"entitlement_key"`
+	Kind              string          `json:"kind"`
+	Value             json.RawMessage `json:"value"`
+	BillingSyncStatus string          `json:"billing_sync_status"`
+	SourcePacketID    string          `json:"source_packet_id"`
+}
+
 // QRWorkspace is the subset of the /v1/qr/workspaces representation exposed by the provider.
 type QRWorkspace struct {
 	ID                       string `json:"id"`
@@ -318,6 +331,10 @@ type accountServicesResponse struct {
 	Data []AccountService `json:"data"`
 }
 
+type entitlementsResponse struct {
+	Data []Entitlement `json:"data"`
+}
+
 type qrWorkspacesResponse struct {
 	Data []QRWorkspace `json:"data"`
 }
@@ -466,6 +483,40 @@ func (c *Client) ListAccountServices(ctx context.Context, accountID string, filt
 	}
 	if result.Data == nil {
 		return []AccountService{}, nil
+	}
+
+	return result.Data, nil
+}
+
+// ListEntitlements returns effective entitlements for an account service. accountID and accountServiceID are required.
+func (c *Client) ListEntitlements(ctx context.Context, accountID string, accountServiceID string, filters map[string]string) ([]Entitlement, error) {
+	accountID = strings.TrimSpace(accountID)
+	if accountID == "" {
+		return nil, fmt.Errorf("account ID is required")
+	}
+	accountServiceID = strings.TrimSpace(accountServiceID)
+	if accountServiceID == "" {
+		return nil, fmt.Errorf("account service ID is required")
+	}
+
+	endpoint := c.listEndpoint("/v1/accounts/"+url.PathEscape(accountID)+"/services/"+url.PathEscape(accountServiceID)+"/entitlements", filters)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create entitlements request: %w", err)
+	}
+	resp, err := c.doJSON(req, "list entitlements")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var result entitlementsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode entitlements response: %w", err)
+	}
+	if result.Data == nil {
+		return []Entitlement{}, nil
 	}
 
 	return result.Data, nil

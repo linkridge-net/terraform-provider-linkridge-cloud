@@ -189,6 +189,75 @@ func TestListAccountServicesSendsPathAndFilters(t *testing.T) {
 	}
 }
 
+func TestListEntitlementsRequiresAccountAndAccountServiceIDs(t *testing.T) {
+	client, err := NewClient(ClientConfig{BaseURL: "https://dev.cloud.linkridge.net", APIToken: "dev-token"})
+	if err != nil {
+		t.Fatalf("expected client, got error: %v", err)
+	}
+
+	if _, err := client.ListEntitlements(context.Background(), "", "asvc_local_qr_demo", nil); err == nil {
+		t.Fatal("expected missing account ID error")
+	}
+	if _, err := client.ListEntitlements(context.Background(), "acct_local_qr_demo", "", nil); err == nil {
+		t.Fatal("expected missing account service ID error")
+	}
+}
+
+func TestListEntitlementsSendsPathAndFilters(t *testing.T) {
+	var gotAuth string
+	var gotPath string
+	var gotEntitlementKey string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		gotPath = r.URL.EscapedPath()
+		gotEntitlementKey = r.URL.Query().Get("entitlement_key")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(entitlementsResponse{
+			Data: []Entitlement{
+				{
+					AccountID:         "acct local/qr demo",
+					AccountServiceID:  "asvc local/qr demo",
+					ServiceID:         "qr-codes",
+					EntitlementKey:    "active_qr_codes",
+					Kind:              "limit",
+					Value:             json.RawMessage(`25`),
+					BillingSyncStatus: "not_created",
+					SourcePacketID:    "local-qr-starter-demo",
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	client, err := NewClient(ClientConfig{BaseURL: server.URL, APIToken: "dev-token"})
+	if err != nil {
+		t.Fatalf("expected client, got error: %v", err)
+	}
+
+	entitlements, err := client.ListEntitlements(context.Background(), "acct local/qr demo", "asvc local/qr demo", map[string]string{
+		"entitlement_key": "active_qr_codes",
+	})
+	if err != nil {
+		t.Fatalf("expected entitlements, got error: %v", err)
+	}
+	if gotAuth != "Bearer dev-token" {
+		t.Fatalf("expected bearer token header, got %q", gotAuth)
+	}
+	if gotPath != "/v1/accounts/acct%20local%2Fqr%20demo/services/asvc%20local%2Fqr%20demo/entitlements" {
+		t.Fatalf("expected escaped entitlements path, got %q", gotPath)
+	}
+	if gotEntitlementKey != "active_qr_codes" {
+		t.Fatalf("expected entitlement_key filter, got %q", gotEntitlementKey)
+	}
+	if len(entitlements) != 1 || entitlements[0].EntitlementKey != "active_qr_codes" {
+		t.Fatalf("unexpected entitlements: %#v", entitlements)
+	}
+	if string(entitlements[0].Value) != "25" {
+		t.Fatalf("unexpected entitlement value: %s", entitlements[0].Value)
+	}
+}
+
 func TestListQRWorkspacesSendsFilters(t *testing.T) {
 	var gotAccountID string
 	var gotAccountServiceID string
