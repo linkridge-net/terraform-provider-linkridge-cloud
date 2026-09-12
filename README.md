@@ -12,16 +12,17 @@ client, and exposes the `/v1/services`, `/v1/accounts`, and
 `/v1/accounts/{account_id}/services/{account_service_id}/billing-export-requests`,
 `/v1/accounts/{account_id}/services/{account_service_id}/support-cases`,
 `/v1/accounts/{account_id}/service-tokens`, `/v1/provisioning-runs`,
-`/v1/review-packets`,
+`/v1/review-packets`, `/v1/audit-events`,
 `/v1/qr/workspaces`, and
 `/v1/qr/workspaces/{workspace_id}/import-jobs` list APIs through Terraform data
 sources. Activation packets and provisioning runs expose review/rehearsal
 evidence only; service-token data is safe metadata only; QR import jobs expose
 plan/review status only; billing export, support case, and review packet data
-sources expose local operator evidence only. The provider never returns token
-secret material, approves activation/provisioning, executes imports, creates
-billing records, sends customer notifications, opens external support tickets,
-or enables hosted redirects. Draft resources will stay plan/dev-only until the
+sources expose local operator evidence only; audit events expose append-only
+evidence only. The provider never returns token secret material, approves
+activation/provisioning, replays audit events, executes imports, creates billing
+records, sends customer notifications, opens external support tickets, or
+enables hosted redirects. Draft resources will stay plan/dev-only until the
 LinkRidge Cloud API approval gates, tenant isolation, and durable audit contracts
 are ready for customer-visible effects.
 
@@ -92,6 +93,12 @@ data "linkridgecloud_review_packets" "service_token" {
   account_id  = "acct_local_qr_demo"
   packet_type = "service_token"
   status      = "blocked_pending_matthew_approval"
+}
+
+data "linkridgecloud_audit_events" "service_token_prepare" {
+  account_id       = "acct_local_qr_demo"
+  action           = "service_token.prepare"
+  source_packet_id = "local-qr-starter-demo"
 }
 
 data "linkridgecloud_service_tokens" "planned" {

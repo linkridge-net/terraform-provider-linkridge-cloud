@@ -38,6 +38,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   handoff metadata without external tickets or customer notifications.
 - Read-only `linkridgecloud_review_packets` data source for `/v1/review-packets`
   normalized approval-gate evidence without approving or executing effects.
+- Read-only `linkridgecloud_audit_events` data source for `/v1/audit-events`
+  append-only evidence without replaying events or causing effects.
 
 ### Changed
 

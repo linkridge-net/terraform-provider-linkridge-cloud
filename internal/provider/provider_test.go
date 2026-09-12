@@ -90,8 +90,8 @@ func TestValidateRequiredConfig(t *testing.T) {
 
 func TestProviderRegistersServicesDataSource(t *testing.T) {
 	dataSources := (&LinkRidgeCloudProvider{}).DataSources(context.Background())
-	if len(dataSources) != 11 {
-		t.Fatalf("expected 11 data sources, got %d", len(dataSources))
+	if len(dataSources) != 12 {
+		t.Fatalf("expected 12 data sources, got %d", len(dataSources))
 	}
 }
 

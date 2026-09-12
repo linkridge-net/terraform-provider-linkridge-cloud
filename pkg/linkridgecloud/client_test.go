@@ -912,6 +912,100 @@ func TestListReviewPacketsSendsFilters(t *testing.T) {
 	}
 }
 
+func TestListAuditEventsSendsFilters(t *testing.T) {
+	var gotAuth string
+	var gotID string
+	var gotAccountID string
+	var gotAccountServiceID string
+	var gotServiceID string
+	var gotAction string
+	var gotTargetType string
+	var gotTargetID string
+	var gotSourcePacketID string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		gotID = r.URL.Query().Get("id")
+		gotAccountID = r.URL.Query().Get("account_id")
+		gotAccountServiceID = r.URL.Query().Get("account_service_id")
+		gotServiceID = r.URL.Query().Get("service_id")
+		gotAction = r.URL.Query().Get("action")
+		gotTargetType = r.URL.Query().Get("target_type")
+		gotTargetID = r.URL.Query().Get("target_id")
+		gotSourcePacketID = r.URL.Query().Get("source_packet_id")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(auditEventsResponse{
+			Data: []AuditEvent{
+				{
+					ID:               "aud_service_token_prepare",
+					AccountID:        "acct_local_qr_demo",
+					AccountServiceID: "asvc_local_qr_demo",
+					ServiceID:        "qr-codes",
+					Action:           "service_token.prepare",
+					TargetType:       "service_token",
+					TargetID:         "stok_local_qr_demo_agent_preview",
+					ActorUserID:      "usr_local_qr_owner",
+					Metadata:         json.RawMessage(`{"external_effect_performed":false}`),
+					SourcePacketID:   "local-qr-starter-demo",
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	client, err := NewClient(ClientConfig{BaseURL: server.URL, APIToken: "dev-token"})
+	if err != nil {
+		t.Fatalf("expected client, got error: %v", err)
+	}
+
+	auditEvents, err := client.ListAuditEvents(context.Background(), map[string]string{
+		"id":                 "aud_service_token_prepare",
+		"account_id":         "acct_local_qr_demo",
+		"account_service_id": "asvc_local_qr_demo",
+		"service_id":         "qr-codes",
+		"action":             "service_token.prepare",
+		"target_type":        "service_token",
+		"target_id":          "stok_local_qr_demo_agent_preview",
+		"source_packet_id":   "local-qr-starter-demo",
+	})
+	if err != nil {
+		t.Fatalf("expected audit events, got error: %v", err)
+	}
+	if gotAuth != "Bearer dev-token" {
+		t.Fatalf("expected bearer token header, got %q", gotAuth)
+	}
+	if gotID != "aud_service_token_prepare" {
+		t.Fatalf("expected id filter, got %q", gotID)
+	}
+	if gotAccountID != "acct_local_qr_demo" {
+		t.Fatalf("expected account_id filter, got %q", gotAccountID)
+	}
+	if gotAccountServiceID != "asvc_local_qr_demo" {
+		t.Fatalf("expected account_service_id filter, got %q", gotAccountServiceID)
+	}
+	if gotServiceID != "qr-codes" {
+		t.Fatalf("expected service_id filter, got %q", gotServiceID)
+	}
+	if gotAction != "service_token.prepare" {
+		t.Fatalf("expected action filter, got %q", gotAction)
+	}
+	if gotTargetType != "service_token" {
+		t.Fatalf("expected target_type filter, got %q", gotTargetType)
+	}
+	if gotTargetID != "stok_local_qr_demo_agent_preview" {
+		t.Fatalf("expected target_id filter, got %q", gotTargetID)
+	}
+	if gotSourcePacketID != "local-qr-starter-demo" {
+		t.Fatalf("expected source_packet_id filter, got %q", gotSourcePacketID)
+	}
+	if len(auditEvents) != 1 || auditEvents[0].ID != "aud_service_token_prepare" {
+		t.Fatalf("unexpected audit events: %#v", auditEvents)
+	}
+	if string(auditEvents[0].Metadata) == "" {
+		t.Fatal("expected audit metadata evidence")
+	}
+}
+
 func TestListServicesReturnsHTTPError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "nope", http.StatusUnauthorized)

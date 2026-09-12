@@ -257,6 +257,23 @@ type ReviewPacket struct {
 	SourcePacketID         string          `json:"source_packet_id"`
 }
 
+// AuditEvent is the safe evidence subset exposed by /v1/audit-events.
+type AuditEvent struct {
+	ID               string          `json:"id"`
+	AccountID        string          `json:"account_id"`
+	AccountServiceID string          `json:"account_service_id"`
+	ServiceID        string          `json:"service_id"`
+	QRWorkspaceID    string          `json:"qr_workspace_id"`
+	QRCodeID         string          `json:"qr_code_id"`
+	Action           string          `json:"action"`
+	TargetType       string          `json:"target_type"`
+	TargetID         string          `json:"target_id"`
+	ActorUserID      string          `json:"actor_user_id"`
+	OccurredAt       string          `json:"occurred_at"`
+	Metadata         json.RawMessage `json:"metadata"`
+	SourcePacketID   string          `json:"source_packet_id"`
+}
+
 // ReviewActor is the safe subset of an actor embedded in review evidence.
 type ReviewActor struct {
 	Subject string `json:"subject"`
@@ -331,6 +348,10 @@ type supportCasesResponse struct {
 
 type reviewPacketsResponse struct {
 	Data []ReviewPacket `json:"data"`
+}
+
+type auditEventsResponse struct {
+	Data []AuditEvent `json:"data"`
 }
 
 // NewClient creates a LinkRidge Cloud client.
@@ -682,6 +703,31 @@ func (c *Client) ListReviewPackets(ctx context.Context, filters map[string]strin
 	}
 	if result.Data == nil {
 		return []ReviewPacket{}, nil
+	}
+
+	return result.Data, nil
+}
+
+// ListAuditEvents returns append-only platform and service audit evidence. filters are optional.
+func (c *Client) ListAuditEvents(ctx context.Context, filters map[string]string) ([]AuditEvent, error) {
+	endpoint := c.listEndpoint("/v1/audit-events", filters)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create audit events request: %w", err)
+	}
+	resp, err := c.doJSON(req, "list audit events")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var result auditEventsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode audit events response: %w", err)
+	}
+	if result.Data == nil {
+		return []AuditEvent{}, nil
 	}
 
 	return result.Data, nil
