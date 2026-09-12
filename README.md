@@ -7,15 +7,18 @@ Terraform provider for the LinkRidge Cloud control-plane API.
 The first provider slice is intentionally read-only: it configures a
 Terraform Plugin Framework provider, creates a small LinkRidge Cloud API
 client, and exposes the `/v1/services`, `/v1/accounts`, and
-`/v1/accounts/{account_id}/services`, `/v1/accounts/{account_id}/service-tokens`,
-`/v1/provisioning-runs`, `/v1/qr/workspaces`, and
+`/v1/accounts/{account_id}/services`,
+`/v1/accounts/{account_id}/services/{account_service_id}/activation-packets`,
+`/v1/accounts/{account_id}/service-tokens`, `/v1/provisioning-runs`,
+`/v1/qr/workspaces`, and
 `/v1/qr/workspaces/{workspace_id}/import-jobs` list APIs through Terraform data
-sources. Service-token data is safe metadata only; provisioning runs expose
-rehearsal evidence only; QR import jobs expose plan/review status only; the
-provider never returns token secret material, approves provisioning, executes
-imports, or enables hosted redirects. Draft resources will stay plan/dev-only
-until the LinkRidge Cloud API approval gates, tenant isolation, and durable
-audit contracts are ready for customer-visible effects.
+sources. Activation packets and provisioning runs expose review/rehearsal
+evidence only; service-token data is safe metadata only; QR import jobs expose
+plan/review status only; the provider never returns token secret material,
+approves activation/provisioning, executes imports, or enables hosted
+redirects. Draft resources will stay plan/dev-only until the LinkRidge Cloud API
+approval gates, tenant isolation, and durable audit contracts are ready for
+customer-visible effects.
 
 <!-- badges-start -->
 [![DevRail compliant](https://devrail.dev/images/badge.svg)](https://devrail.dev)
@@ -43,6 +46,12 @@ data "linkridgecloud_accounts" "draft" {
 data "linkridgecloud_account_services" "planned" {
   account_id = "acct_local_qr_demo"
   status     = "planned"
+}
+
+data "linkridgecloud_activation_packets" "planned" {
+  account_id         = "acct_local_qr_demo"
+  account_service_id = "asvc_local_qr_demo"
+  status             = "blocked_pending_matthew_approval"
 }
 
 data "linkridgecloud_qr_workspaces" "planned" {

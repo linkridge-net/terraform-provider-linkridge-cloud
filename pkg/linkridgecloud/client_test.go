@@ -426,6 +426,134 @@ func TestListServiceTokensSendsPathAndFilters(t *testing.T) {
 	}
 }
 
+func TestListActivationPacketsSendsPathAndFilters(t *testing.T) {
+	var gotAuth string
+	var gotPath string
+	var gotID string
+	var gotStatus string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		gotPath = r.URL.EscapedPath()
+		gotID = r.URL.Query().Get("id")
+		gotStatus = r.URL.Query().Get("status")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(activationPacketsResponse{
+			Data: []ActivationPacket{
+				{
+					ID:                     "local-qr-starter-demo",
+					SourcePacketID:         "local-qr-starter-demo",
+					Status:                 "blocked_pending_matthew_approval",
+					ActivationPerformed:    false,
+					ApprovalRequired:       "matthew",
+					ExternalEffectsEnabled: false,
+					Account: struct {
+						ID                 string `json:"id"`
+						Name               string `json:"name"`
+						Status             string `json:"status"`
+						PrimaryOwnerUserID string `json:"primary_owner_user_id"`
+					}{
+						ID:                 "acct local/qr demo",
+						Name:               "Local QR Demo",
+						Status:             "draft",
+						PrimaryOwnerUserID: "usr_local_qr_owner",
+					},
+					AccountService: struct {
+						ID        string `json:"id"`
+						AccountID string `json:"account_id"`
+						ServiceID string `json:"service_id"`
+						PlanKey   string `json:"plan_key"`
+						Status    string `json:"status"`
+					}{
+						ID:        "asvc local/qr demo",
+						AccountID: "acct local/qr demo",
+						ServiceID: "qr-codes",
+						PlanKey:   "starter",
+						Status:    "modeled",
+					},
+					ServiceWorkspace: struct {
+						ID        string `json:"id"`
+						AccountID string `json:"account_id"`
+						ServiceID string `json:"service_id"`
+						PlanKey   string `json:"plan_key"`
+						Status    string `json:"status"`
+					}{
+						ID:        "qrw_local_demo",
+						AccountID: "acct local/qr demo",
+						ServiceID: "qr-codes",
+						PlanKey:   "starter",
+						Status:    "planned",
+					},
+					OperatorApprovalDecision: struct {
+						DecisionID       string   `json:"decision_id"`
+						DecisionState    string   `json:"decision_state"`
+						RequiredApproval string   `json:"required_approval"`
+						ApprovedActions  []string `json:"approved_actions"`
+						BlockedActions   []string `json:"blocked_actions"`
+						Result           string   `json:"result"`
+					}{
+						DecisionID:       "opd_local_qr_demo_001",
+						DecisionState:    "blocked",
+						RequiredApproval: "matthew",
+						BlockedActions:   []string{"create_billing_customer", "run_production_deploy"},
+						Result:           "not_executed",
+					},
+					LocalProvisioningRun: struct {
+						RunID                      string   `json:"run_id"`
+						Status                     string   `json:"status"`
+						PlannedSteps               []string `json:"planned_steps"`
+						LocalRecordsPrepared       []string `json:"local_records_prepared"`
+						ExternalWritesBlocked      []string `json:"external_writes_blocked"`
+						NextRequiredOperatorAction string   `json:"next_required_operator_action"`
+					}{
+						RunID:                      "lpv_local_qr_demo_001",
+						Status:                     "rehearsal_only",
+						PlannedSteps:               []string{"accounts", "qr_workspaces"},
+						LocalRecordsPrepared:       []string{"accounts", "qr_workspaces"},
+						ExternalWritesBlocked:      []string{"billing_customer", "external_qr_redirect"},
+						NextRequiredOperatorAction: "review_activation_packet",
+					},
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	client, err := NewClient(ClientConfig{BaseURL: server.URL, APIToken: "dev-token"})
+	if err != nil {
+		t.Fatalf("expected client, got error: %v", err)
+	}
+
+	activationPackets, err := client.ListActivationPackets(context.Background(), "acct local/qr demo", "asvc local/qr demo", map[string]string{
+		"id":     "local-qr-starter-demo",
+		"status": "blocked_pending_matthew_approval",
+	})
+	if err != nil {
+		t.Fatalf("expected activation packets, got error: %v", err)
+	}
+	if gotAuth != "Bearer dev-token" {
+		t.Fatalf("expected bearer token header, got %q", gotAuth)
+	}
+	if gotPath != "/v1/accounts/acct%20local%2Fqr%20demo/services/asvc%20local%2Fqr%20demo/activation-packets" {
+		t.Fatalf("expected escaped activation packets path, got %q", gotPath)
+	}
+	if gotID != "local-qr-starter-demo" {
+		t.Fatalf("expected id filter, got %q", gotID)
+	}
+	if gotStatus != "blocked_pending_matthew_approval" {
+		t.Fatalf("expected status filter, got %q", gotStatus)
+	}
+	if len(activationPackets) != 1 || activationPackets[0].ID != "local-qr-starter-demo" {
+		t.Fatalf("unexpected activation packets: %#v", activationPackets)
+	}
+	if activationPackets[0].ActivationPerformed {
+		t.Fatal("expected activation packet to report no performed activation")
+	}
+	if activationPackets[0].ExternalEffectsEnabled {
+		t.Fatal("expected activation packet to report external effects disabled")
+	}
+}
+
 func TestListProvisioningRunsSendsFilters(t *testing.T) {
 	var gotAuth string
 	var gotAccountID string

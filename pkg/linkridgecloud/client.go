@@ -116,6 +116,52 @@ type ServiceToken struct {
 	ExternalEffectsEnabled bool     `json:"external_effects_enabled"`
 }
 
+// ActivationPacket is the safe review subset of the /v1/accounts/{account_id}/services/{account_service_id}/activation-packets representation exposed by the provider.
+type ActivationPacket struct {
+	ID                     string `json:"id"`
+	SourcePacketID         string `json:"source_packet_id"`
+	Status                 string `json:"status"`
+	ActivationPerformed    bool   `json:"activation_performed"`
+	ApprovalRequired       string `json:"approval_required"`
+	ExternalEffectsEnabled bool   `json:"external_effects_enabled"`
+	Account                struct {
+		ID                 string `json:"id"`
+		Name               string `json:"name"`
+		Status             string `json:"status"`
+		PrimaryOwnerUserID string `json:"primary_owner_user_id"`
+	} `json:"account"`
+	AccountService struct {
+		ID        string `json:"id"`
+		AccountID string `json:"account_id"`
+		ServiceID string `json:"service_id"`
+		PlanKey   string `json:"plan_key"`
+		Status    string `json:"status"`
+	} `json:"account_service"`
+	ServiceWorkspace struct {
+		ID        string `json:"id"`
+		AccountID string `json:"account_id"`
+		ServiceID string `json:"service_id"`
+		PlanKey   string `json:"plan_key"`
+		Status    string `json:"status"`
+	} `json:"service_workspace"`
+	OperatorApprovalDecision struct {
+		DecisionID       string   `json:"decision_id"`
+		DecisionState    string   `json:"decision_state"`
+		RequiredApproval string   `json:"required_approval"`
+		ApprovedActions  []string `json:"approved_actions"`
+		BlockedActions   []string `json:"blocked_actions"`
+		Result           string   `json:"result"`
+	} `json:"operator_approval_decision"`
+	LocalProvisioningRun struct {
+		RunID                      string   `json:"run_id"`
+		Status                     string   `json:"status"`
+		PlannedSteps               []string `json:"planned_steps"`
+		LocalRecordsPrepared       []string `json:"local_records_prepared"`
+		ExternalWritesBlocked      []string `json:"external_writes_blocked"`
+		NextRequiredOperatorAction string   `json:"next_required_operator_action"`
+	} `json:"local_provisioning_run"`
+}
+
 // ProvisioningRun is the safe evidence subset of the /v1/provisioning-runs representation exposed by the provider.
 type ProvisioningRun struct {
 	ID                         string                `json:"id"`
@@ -186,6 +232,10 @@ type qrImportJobsResponse struct {
 
 type serviceTokensResponse struct {
 	Data []ServiceToken `json:"data"`
+}
+
+type activationPacketsResponse struct {
+	Data []ActivationPacket `json:"data"`
 }
 
 type provisioningRunsResponse struct {
@@ -389,6 +439,40 @@ func (c *Client) ListServiceTokens(ctx context.Context, accountID string, filter
 	}
 	if result.Data == nil {
 		return []ServiceToken{}, nil
+	}
+
+	return result.Data, nil
+}
+
+// ListActivationPackets returns safe activation review metadata for an account service. accountID and accountServiceID are required.
+func (c *Client) ListActivationPackets(ctx context.Context, accountID string, accountServiceID string, filters map[string]string) ([]ActivationPacket, error) {
+	accountID = strings.TrimSpace(accountID)
+	if accountID == "" {
+		return nil, fmt.Errorf("account ID is required")
+	}
+	accountServiceID = strings.TrimSpace(accountServiceID)
+	if accountServiceID == "" {
+		return nil, fmt.Errorf("account service ID is required")
+	}
+
+	endpoint := c.listEndpoint("/v1/accounts/"+url.PathEscape(accountID)+"/services/"+url.PathEscape(accountServiceID)+"/activation-packets", filters)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create activation packets request: %w", err)
+	}
+	resp, err := c.doJSON(req, "list activation packets")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var result activationPacketsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode activation packets response: %w", err)
+	}
+	if result.Data == nil {
+		return []ActivationPacket{}, nil
 	}
 
 	return result.Data, nil
