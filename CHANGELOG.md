@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tenant planning records.
 - Read-only `linkridgecloud_account_services` data source for
   `/v1/accounts/{account_id}/services` service planning records.
+- Read-only `linkridgecloud_service_tokens` data source for safe
+  `/v1/accounts/{account_id}/service-tokens` metadata without secret material.
 - Read-only `linkridgecloud_qr_workspaces` data source for `/v1/qr/workspaces`
   QR service planning records.
 

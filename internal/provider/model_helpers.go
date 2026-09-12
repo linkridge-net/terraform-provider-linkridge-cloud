@@ -21,3 +21,11 @@ func stringFilters(values map[string]types.String) map[string]string {
 	}
 	return filters
 }
+
+func stringSliceValues(values []string) []types.String {
+	result := make([]types.String, 0, len(values))
+	for _, value := range values {
+		result = append(result, types.StringValue(value))
+	}
+	return result
+}

@@ -74,6 +74,22 @@ type QRWorkspace struct {
 	ExternalRedirectsEnabled bool   `json:"external_redirects_enabled"`
 }
 
+// ServiceToken is the safe metadata subset of the /v1/accounts/{account_id}/service-tokens representation exposed by the provider.
+type ServiceToken struct {
+	ID                     string   `json:"id"`
+	AccountID              string   `json:"account_id"`
+	AccountServiceID       string   `json:"account_service_id"`
+	ServiceID              string   `json:"service_id"`
+	CreatedByUserID        string   `json:"created_by_user_id"`
+	Name                   string   `json:"name"`
+	Scopes                 []string `json:"scopes"`
+	Status                 string   `json:"status"`
+	SecretMaterialIssued   bool     `json:"secret_material_issued"`
+	ApprovalRequired       string   `json:"approval_required"`
+	SourcePacketID         string   `json:"source_packet_id"`
+	ExternalEffectsEnabled bool     `json:"external_effects_enabled"`
+}
+
 type servicesResponse struct {
 	Data []Service `json:"data"`
 }
@@ -88,6 +104,10 @@ type accountServicesResponse struct {
 
 type qrWorkspacesResponse struct {
 	Data []QRWorkspace `json:"data"`
+}
+
+type serviceTokensResponse struct {
+	Data []ServiceToken `json:"data"`
 }
 
 // NewClient creates a LinkRidge Cloud client.
@@ -227,6 +247,36 @@ func (c *Client) ListQRWorkspaces(ctx context.Context, filters map[string]string
 	}
 	if result.Data == nil {
 		return []QRWorkspace{}, nil
+	}
+
+	return result.Data, nil
+}
+
+// ListServiceTokens returns safe service token metadata for an account. accountID is required.
+func (c *Client) ListServiceTokens(ctx context.Context, accountID string, filters map[string]string) ([]ServiceToken, error) {
+	accountID = strings.TrimSpace(accountID)
+	if accountID == "" {
+		return nil, fmt.Errorf("account ID is required")
+	}
+
+	endpoint := c.listEndpoint("/v1/accounts/"+url.PathEscape(accountID)+"/service-tokens", filters)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create service tokens request: %w", err)
+	}
+	resp, err := c.doJSON(req, "list service tokens")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var result serviceTokensResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode service tokens response: %w", err)
+	}
+	if result.Data == nil {
+		return []ServiceToken{}, nil
 	}
 
 	return result.Data, nil

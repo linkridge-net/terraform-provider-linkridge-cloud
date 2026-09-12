@@ -7,10 +7,12 @@ Terraform provider for the LinkRidge Cloud control-plane API.
 The first provider slice is intentionally read-only: it configures a
 Terraform Plugin Framework provider, creates a small LinkRidge Cloud API
 client, and exposes the `/v1/services`, `/v1/accounts`, and
-`/v1/accounts/{account_id}/services`, and `/v1/qr/workspaces` list APIs
-through Terraform data sources. Draft resources will stay plan/dev-only until
-the LinkRidge Cloud API approval gates, tenant isolation, and durable audit
-contracts are ready for customer-visible effects.
+`/v1/accounts/{account_id}/services`, `/v1/accounts/{account_id}/service-tokens`,
+and `/v1/qr/workspaces` list APIs through Terraform data sources. Service-token
+data is safe metadata only; the provider never returns or creates token secret
+material. Draft resources will stay plan/dev-only until the LinkRidge Cloud API
+approval gates, tenant isolation, and durable audit contracts are ready for
+customer-visible effects.
 
 <!-- badges-start -->
 [![DevRail compliant](https://devrail.dev/images/badge.svg)](https://devrail.dev)
@@ -43,6 +45,12 @@ data "linkridgecloud_account_services" "planned" {
 data "linkridgecloud_qr_workspaces" "planned" {
   account_id = "acct_local_qr_demo"
   status     = "planned"
+}
+
+data "linkridgecloud_service_tokens" "planned" {
+  account_id             = "acct_local_qr_demo"
+  status                 = "planned"
+  secret_material_issued = false
 }
 ```
 

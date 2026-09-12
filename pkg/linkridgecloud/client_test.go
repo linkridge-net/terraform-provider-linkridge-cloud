@@ -243,6 +243,88 @@ func TestListQRWorkspacesSendsFilters(t *testing.T) {
 	}
 }
 
+func TestListServiceTokensRequiresAccountID(t *testing.T) {
+	client, err := NewClient(ClientConfig{BaseURL: "https://dev.cloud.linkridge.net", APIToken: "dev-token"})
+	if err != nil {
+		t.Fatalf("expected client, got error: %v", err)
+	}
+
+	if _, err := client.ListServiceTokens(context.Background(), "", nil); err == nil {
+		t.Fatal("expected missing account ID error")
+	}
+}
+
+func TestListServiceTokensSendsPathAndFilters(t *testing.T) {
+	var gotAuth string
+	var gotPath string
+	var gotID string
+	var gotStatus string
+	var gotSecretMaterialIssued string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		gotPath = r.URL.EscapedPath()
+		gotID = r.URL.Query().Get("id")
+		gotStatus = r.URL.Query().Get("status")
+		gotSecretMaterialIssued = r.URL.Query().Get("secret_material_issued")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(serviceTokensResponse{
+			Data: []ServiceToken{
+				{
+					ID:                     "stok_local_qr_demo_agent_preview",
+					AccountID:              "acct local/qr demo",
+					AccountServiceID:       "asvc_local_qr_demo",
+					ServiceID:              "qr-codes",
+					CreatedByUserID:        "usr_local_qr_owner",
+					Name:                   "Local QR agent preview",
+					Scopes:                 []string{"qr:read", "qr:plan_import"},
+					Status:                 "planned",
+					SecretMaterialIssued:   false,
+					ApprovalRequired:       "matthew",
+					SourcePacketID:         "local-qr-starter-demo",
+					ExternalEffectsEnabled: false,
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	client, err := NewClient(ClientConfig{BaseURL: server.URL, APIToken: "dev-token"})
+	if err != nil {
+		t.Fatalf("expected client, got error: %v", err)
+	}
+
+	serviceTokens, err := client.ListServiceTokens(context.Background(), "acct local/qr demo", map[string]string{
+		"id":                     "stok_local_qr_demo_agent_preview",
+		"status":                 "planned",
+		"secret_material_issued": "false",
+	})
+	if err != nil {
+		t.Fatalf("expected service tokens, got error: %v", err)
+	}
+	if gotAuth != "Bearer dev-token" {
+		t.Fatalf("expected bearer token header, got %q", gotAuth)
+	}
+	if gotPath != "/v1/accounts/acct%20local%2Fqr%20demo/service-tokens" {
+		t.Fatalf("expected escaped service tokens path, got %q", gotPath)
+	}
+	if gotID != "stok_local_qr_demo_agent_preview" {
+		t.Fatalf("expected id filter, got %q", gotID)
+	}
+	if gotStatus != "planned" {
+		t.Fatalf("expected status filter, got %q", gotStatus)
+	}
+	if gotSecretMaterialIssued != "false" {
+		t.Fatalf("expected secret_material_issued filter, got %q", gotSecretMaterialIssued)
+	}
+	if len(serviceTokens) != 1 || serviceTokens[0].ID != "stok_local_qr_demo_agent_preview" {
+		t.Fatalf("unexpected service tokens: %#v", serviceTokens)
+	}
+	if serviceTokens[0].SecretMaterialIssued {
+		t.Fatal("expected service token metadata to report no issued secret material")
+	}
+}
+
 func TestListServicesReturnsHTTPError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "nope", http.StatusUnauthorized)
