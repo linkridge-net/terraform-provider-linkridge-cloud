@@ -126,6 +126,22 @@ export LINKRIDGE_CLOUD_API_TOKEN="..."
 Never commit token values. The provider only sends the token as a bearer
 credential to the configured LinkRidge Cloud API.
 
+### Read-only dev acceptance checks
+
+The normal Go test suite never calls the network. To verify the provider client
+against the dev control-plane API, opt in explicitly:
+
+```shell
+export LINKRIDGE_CLOUD_BASE_URL="https://dev.cloud.linkridge.net"
+export LINKRIDGE_CLOUD_API_TOKEN="..."
+LINKRIDGE_CLOUD_ACC=1 go test ./pkg/linkridgecloud -run TestAccClientReadOnlyDevSurface -count=1
+```
+
+The acceptance check only reads current `/v1` data and asserts the dev guardrails
+remain closed: no service-token secret material, activation/provisioning
+execution, billing export, support notification, import execution, or hosted QR
+redirect is enabled.
+
 ## Usage
 
 The Makefile is the universal execution interface. Every target produces consistent behavior whether invoked by a developer, CI pipeline, or AI agent.
