@@ -131,6 +131,7 @@ func (p *LinkRidgeCloudProvider) DataSources(_ context.Context) []func() datasou
 	return []func() datasource.DataSource{
 		NewAccountServicesDataSource,
 		NewAccountsDataSource,
+		NewQRImportJobsDataSource,
 		NewQRWorkspacesDataSource,
 		NewServiceTokensDataSource,
 		NewServicesDataSource,

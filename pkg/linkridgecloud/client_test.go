@@ -254,6 +254,107 @@ func TestListServiceTokensRequiresAccountID(t *testing.T) {
 	}
 }
 
+func TestListQRImportJobsRequiresWorkspaceID(t *testing.T) {
+	client, err := NewClient(ClientConfig{BaseURL: "https://dev.cloud.linkridge.net", APIToken: "dev-token"})
+	if err != nil {
+		t.Fatalf("expected client, got error: %v", err)
+	}
+
+	if _, err := client.ListQRImportJobs(context.Background(), "", nil); err == nil {
+		t.Fatal("expected missing workspace ID error")
+	}
+}
+
+func TestListQRImportJobsSendsPathAndFilters(t *testing.T) {
+	var gotAuth string
+	var gotPath string
+	var gotID string
+	var gotStatus string
+	var gotImportPerformed string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		gotPath = r.URL.EscapedPath()
+		gotID = r.URL.Query().Get("id")
+		gotStatus = r.URL.Query().Get("status")
+		gotImportPerformed = r.URL.Query().Get("import_performed")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(qrImportJobsResponse{
+			Data: []QRImportJob{
+				{
+					ID:                       "qrimp_local_demo_open_qr_links",
+					AccountID:                "acct_local_qr_demo",
+					AccountServiceID:         "asvc_local_qr_demo",
+					QRWorkspaceID:            "qrw local/qr demo",
+					ServiceID:                "qr-codes",
+					Source:                   "open_qr_links_json",
+					SourceRepository:         "https://gitlab.mfsoho.linkridge.net/makersridge/open-qr",
+					RequestedByUserID:        "usr_local_qr_owner",
+					Status:                   "planned",
+					ImportPerformed:          false,
+					RecordsExamined:          2,
+					RecordsPlanned:           1,
+					RecordsRejected:          1,
+					SourcePacketID:           "local-qr-starter-demo",
+					ExternalRedirectsEnabled: false,
+					ImportReviewPacket: struct {
+						Status                  string `json:"status"`
+						ApprovalRequired        string `json:"approval_required"`
+						ArtifactReviewed        bool   `json:"artifact_reviewed"`
+						ParserContractChecked   bool   `json:"parser_contract_checked"`
+						ExternalEffectPerformed bool   `json:"external_effect_performed"`
+					}{
+						Status:                  "blocked_pending_matthew_approval",
+						ApprovalRequired:        "matthew",
+						ArtifactReviewed:        false,
+						ParserContractChecked:   true,
+						ExternalEffectPerformed: false,
+					},
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	client, err := NewClient(ClientConfig{BaseURL: server.URL, APIToken: "dev-token"})
+	if err != nil {
+		t.Fatalf("expected client, got error: %v", err)
+	}
+
+	importJobs, err := client.ListQRImportJobs(context.Background(), "qrw local/qr demo", map[string]string{
+		"id":               "qrimp_local_demo_open_qr_links",
+		"status":           "planned",
+		"import_performed": "false",
+	})
+	if err != nil {
+		t.Fatalf("expected QR import jobs, got error: %v", err)
+	}
+	if gotAuth != "Bearer dev-token" {
+		t.Fatalf("expected bearer token header, got %q", gotAuth)
+	}
+	if gotPath != "/v1/qr/workspaces/qrw%20local%2Fqr%20demo/import-jobs" {
+		t.Fatalf("expected escaped QR import jobs path, got %q", gotPath)
+	}
+	if gotID != "qrimp_local_demo_open_qr_links" {
+		t.Fatalf("expected id filter, got %q", gotID)
+	}
+	if gotStatus != "planned" {
+		t.Fatalf("expected status filter, got %q", gotStatus)
+	}
+	if gotImportPerformed != "false" {
+		t.Fatalf("expected import_performed filter, got %q", gotImportPerformed)
+	}
+	if len(importJobs) != 1 || importJobs[0].ID != "qrimp_local_demo_open_qr_links" {
+		t.Fatalf("unexpected QR import jobs: %#v", importJobs)
+	}
+	if importJobs[0].ImportPerformed {
+		t.Fatal("expected import planning metadata to report no performed import")
+	}
+	if importJobs[0].ImportReviewPacket.ExternalEffectPerformed {
+		t.Fatal("expected import review packet to report no external effect")
+	}
+}
+
 func TestListServiceTokensSendsPathAndFilters(t *testing.T) {
 	var gotAuth string
 	var gotPath string

@@ -74,6 +74,32 @@ type QRWorkspace struct {
 	ExternalRedirectsEnabled bool   `json:"external_redirects_enabled"`
 }
 
+// QRImportJob is the safe planning subset of the /v1/qr/workspaces/{workspace_id}/import-jobs representation exposed by the provider.
+type QRImportJob struct {
+	ID                       string `json:"id"`
+	AccountID                string `json:"account_id"`
+	AccountServiceID         string `json:"account_service_id"`
+	QRWorkspaceID            string `json:"qr_workspace_id"`
+	ServiceID                string `json:"service_id"`
+	Source                   string `json:"source"`
+	SourceRepository         string `json:"source_repository"`
+	RequestedByUserID        string `json:"requested_by_user_id"`
+	Status                   string `json:"status"`
+	ImportPerformed          bool   `json:"import_performed"`
+	RecordsExamined          int64  `json:"records_examined"`
+	RecordsPlanned           int64  `json:"records_planned"`
+	RecordsRejected          int64  `json:"records_rejected"`
+	SourcePacketID           string `json:"source_packet_id"`
+	ExternalRedirectsEnabled bool   `json:"external_redirects_enabled"`
+	ImportReviewPacket       struct {
+		Status                  string `json:"status"`
+		ApprovalRequired        string `json:"approval_required"`
+		ArtifactReviewed        bool   `json:"artifact_reviewed"`
+		ParserContractChecked   bool   `json:"parser_contract_checked"`
+		ExternalEffectPerformed bool   `json:"external_effect_performed"`
+	} `json:"import_review_packet"`
+}
+
 // ServiceToken is the safe metadata subset of the /v1/accounts/{account_id}/service-tokens representation exposed by the provider.
 type ServiceToken struct {
 	ID                     string   `json:"id"`
@@ -104,6 +130,10 @@ type accountServicesResponse struct {
 
 type qrWorkspacesResponse struct {
 	Data []QRWorkspace `json:"data"`
+}
+
+type qrImportJobsResponse struct {
+	Data []QRImportJob `json:"data"`
 }
 
 type serviceTokensResponse struct {
@@ -247,6 +277,36 @@ func (c *Client) ListQRWorkspaces(ctx context.Context, filters map[string]string
 	}
 	if result.Data == nil {
 		return []QRWorkspace{}, nil
+	}
+
+	return result.Data, nil
+}
+
+// ListQRImportJobs returns safe QR import planning records for a workspace. workspaceID is required.
+func (c *Client) ListQRImportJobs(ctx context.Context, workspaceID string, filters map[string]string) ([]QRImportJob, error) {
+	workspaceID = strings.TrimSpace(workspaceID)
+	if workspaceID == "" {
+		return nil, fmt.Errorf("workspace ID is required")
+	}
+
+	endpoint := c.listEndpoint("/v1/qr/workspaces/"+url.PathEscape(workspaceID)+"/import-jobs", filters)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create QR import jobs request: %w", err)
+	}
+	resp, err := c.doJSON(req, "list QR import jobs")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var result qrImportJobsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode QR import jobs response: %w", err)
+	}
+	if result.Data == nil {
+		return []QRImportJob{}, nil
 	}
 
 	return result.Data, nil
