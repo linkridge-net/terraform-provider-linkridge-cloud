@@ -49,6 +49,43 @@ type Account struct {
 	ExternalEffectsEnabled bool   `json:"external_effects_enabled"`
 }
 
+// AccountMembership is the safe account role-assignment subset exposed by the provider.
+type AccountMembership struct {
+	ID                   string `json:"id"`
+	AccountID            string `json:"account_id"`
+	UserID               string `json:"user_id"`
+	Role                 string `json:"role"`
+	Status               string `json:"status"`
+	InviteDeliveryStatus string `json:"invite_delivery_status"`
+	SourcePacketID       string `json:"source_packet_id"`
+}
+
+// AccountInvite is the safe draft invite subset exposed by the provider.
+type AccountInvite struct {
+	ID                     string   `json:"id"`
+	AccountID              string   `json:"account_id"`
+	Email                  string   `json:"email"`
+	Role                   string   `json:"role"`
+	ServiceScope           []string `json:"service_scope"`
+	Status                 string   `json:"status"`
+	ExpiresAt              string   `json:"expires_at"`
+	CreatedByUserID        string   `json:"created_by_user_id"`
+	CreatedAt              string   `json:"created_at"`
+	UpdatedAt              string   `json:"updated_at"`
+	InviteDeliveryStatus   string   `json:"invite_delivery_status"`
+	ApprovalRequired       string   `json:"approval_required"`
+	SourcePacketID         string   `json:"source_packet_id"`
+	ExternalEffectsEnabled bool     `json:"external_effects_enabled"`
+	Delivery               struct {
+		Status                  string `json:"status"`
+		SentAt                  string `json:"sent_at"`
+		AcceptedAt              string `json:"accepted_at"`
+		ExternalEffectPerformed bool   `json:"external_effect_performed"`
+		ApprovalRequired        string `json:"approval_required"`
+		BlockedReason           string `json:"blocked_reason"`
+	} `json:"delivery"`
+}
+
 // AccountService is the subset of the /v1/accounts/{account_id}/services representation exposed by the provider.
 type AccountService struct {
 	ID                     string `json:"id"`
@@ -327,6 +364,14 @@ type accountsResponse struct {
 	Data []Account `json:"data"`
 }
 
+type accountMembershipsResponse struct {
+	Data []AccountMembership `json:"data"`
+}
+
+type accountInvitesResponse struct {
+	Data []AccountInvite `json:"data"`
+}
+
 type accountServicesResponse struct {
 	Data []AccountService `json:"data"`
 }
@@ -463,6 +508,66 @@ func (c *Client) ListAccounts(ctx context.Context, id string, status string) ([]
 	}
 	if result.Data == nil {
 		return []Account{}, nil
+	}
+
+	return result.Data, nil
+}
+
+// ListAccountMemberships returns role assignments for an account. accountID is required.
+func (c *Client) ListAccountMemberships(ctx context.Context, accountID string, filters map[string]string) ([]AccountMembership, error) {
+	accountID = strings.TrimSpace(accountID)
+	if accountID == "" {
+		return nil, fmt.Errorf("account ID is required")
+	}
+
+	endpoint := c.listEndpoint("/v1/accounts/"+url.PathEscape(accountID)+"/memberships", filters)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create account memberships request: %w", err)
+	}
+	resp, err := c.doJSON(req, "list account memberships")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var result accountMembershipsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode account memberships response: %w", err)
+	}
+	if result.Data == nil {
+		return []AccountMembership{}, nil
+	}
+
+	return result.Data, nil
+}
+
+// ListAccountInvites returns draft invite packets for an account. accountID is required.
+func (c *Client) ListAccountInvites(ctx context.Context, accountID string, filters map[string]string) ([]AccountInvite, error) {
+	accountID = strings.TrimSpace(accountID)
+	if accountID == "" {
+		return nil, fmt.Errorf("account ID is required")
+	}
+
+	endpoint := c.listEndpoint("/v1/accounts/"+url.PathEscape(accountID)+"/invites", filters)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create account invites request: %w", err)
+	}
+	resp, err := c.doJSON(req, "list account invites")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var result accountInvitesResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode account invites response: %w", err)
+	}
+	if result.Data == nil {
+		return []AccountInvite{}, nil
 	}
 
 	return result.Data, nil

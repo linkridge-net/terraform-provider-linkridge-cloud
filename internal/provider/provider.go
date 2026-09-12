@@ -130,6 +130,8 @@ func (p *LinkRidgeCloudProvider) Resources(_ context.Context) []func() resource.
 func (p *LinkRidgeCloudProvider) DataSources(_ context.Context) []func() datasource.DataSource {
 	return []func() datasource.DataSource{
 		NewActivationPacketsDataSource,
+		NewAccountInvitesDataSource,
+		NewAccountMembershipsDataSource,
 		NewAccountServicesDataSource,
 		NewAccountsDataSource,
 		NewAuditEventsDataSource,

@@ -119,6 +119,185 @@ func TestListAccountsSendsFilters(t *testing.T) {
 	}
 }
 
+func TestListAccountMembershipsRequiresAccountID(t *testing.T) {
+	client, err := NewClient(ClientConfig{BaseURL: "https://dev.cloud.linkridge.net", APIToken: "dev-token"})
+	if err != nil {
+		t.Fatalf("expected client, got error: %v", err)
+	}
+
+	if _, err := client.ListAccountMemberships(context.Background(), "", nil); err == nil {
+		t.Fatal("expected missing account ID error")
+	}
+}
+
+func TestListAccountMembershipsSendsPathAndFilters(t *testing.T) {
+	var gotAuth string
+	var gotPath string
+	var gotUserID string
+	var gotRole string
+	var gotStatus string
+	var gotSourcePacketID string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		gotPath = r.URL.EscapedPath()
+		gotUserID = r.URL.Query().Get("user_id")
+		gotRole = r.URL.Query().Get("role")
+		gotStatus = r.URL.Query().Get("status")
+		gotSourcePacketID = r.URL.Query().Get("source_packet_id")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(accountMembershipsResponse{
+			Data: []AccountMembership{
+				{
+					ID:                   "mbr_local_qr_owner",
+					AccountID:            "acct local/qr demo",
+					UserID:               "usr_local_qr_owner",
+					Role:                 "owner",
+					Status:               "planned",
+					InviteDeliveryStatus: "not_sent",
+					SourcePacketID:       "local-qr-starter-demo",
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	client, err := NewClient(ClientConfig{BaseURL: server.URL, APIToken: "dev-token"})
+	if err != nil {
+		t.Fatalf("expected client, got error: %v", err)
+	}
+
+	memberships, err := client.ListAccountMemberships(context.Background(), "acct local/qr demo", map[string]string{
+		"user_id":          "usr_local_qr_owner",
+		"role":             "owner",
+		"status":           "planned",
+		"source_packet_id": "local-qr-starter-demo",
+	})
+	if err != nil {
+		t.Fatalf("expected account memberships, got error: %v", err)
+	}
+	if gotAuth != "Bearer dev-token" {
+		t.Fatalf("expected bearer token header, got %q", gotAuth)
+	}
+	if gotPath != "/v1/accounts/acct%20local%2Fqr%20demo/memberships" {
+		t.Fatalf("expected escaped account memberships path, got %q", gotPath)
+	}
+	if gotUserID != "usr_local_qr_owner" {
+		t.Fatalf("expected user_id filter, got %q", gotUserID)
+	}
+	if gotRole != "owner" {
+		t.Fatalf("expected role filter, got %q", gotRole)
+	}
+	if gotStatus != "planned" {
+		t.Fatalf("expected status filter, got %q", gotStatus)
+	}
+	if gotSourcePacketID != "local-qr-starter-demo" {
+		t.Fatalf("expected source_packet_id filter, got %q", gotSourcePacketID)
+	}
+	if len(memberships) != 1 || memberships[0].ID != "mbr_local_qr_owner" {
+		t.Fatalf("unexpected account memberships: %#v", memberships)
+	}
+}
+
+func TestListAccountInvitesRequiresAccountID(t *testing.T) {
+	client, err := NewClient(ClientConfig{BaseURL: "https://dev.cloud.linkridge.net", APIToken: "dev-token"})
+	if err != nil {
+		t.Fatalf("expected client, got error: %v", err)
+	}
+
+	if _, err := client.ListAccountInvites(context.Background(), "", nil); err == nil {
+		t.Fatal("expected missing account ID error")
+	}
+}
+
+func TestListAccountInvitesSendsPathAndFilters(t *testing.T) {
+	var gotAuth string
+	var gotPath string
+	var gotRole string
+	var gotStatus string
+	var gotInviteDeliveryStatus string
+	var gotSourcePacketID string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		gotPath = r.URL.EscapedPath()
+		gotRole = r.URL.Query().Get("role")
+		gotStatus = r.URL.Query().Get("status")
+		gotInviteDeliveryStatus = r.URL.Query().Get("invite_delivery_status")
+		gotSourcePacketID = r.URL.Query().Get("source_packet_id")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(accountInvitesResponse{
+			Data: []AccountInvite{
+				{
+					ID:                     "inv_local_qr_demo_editor",
+					AccountID:              "acct local/qr demo",
+					Email:                  "editor@example.invalid",
+					Role:                   "editor",
+					ServiceScope:           []string{"qr-codes"},
+					Status:                 "draft",
+					InviteDeliveryStatus:   "not_sent",
+					ApprovalRequired:       "matthew",
+					SourcePacketID:         "local-qr-starter-demo",
+					ExternalEffectsEnabled: false,
+					Delivery: struct {
+						Status                  string `json:"status"`
+						SentAt                  string `json:"sent_at"`
+						AcceptedAt              string `json:"accepted_at"`
+						ExternalEffectPerformed bool   `json:"external_effect_performed"`
+						ApprovalRequired        string `json:"approval_required"`
+						BlockedReason           string `json:"blocked_reason"`
+					}{
+						Status:                  "not_sent",
+						ExternalEffectPerformed: false,
+						ApprovalRequired:        "matthew",
+						BlockedReason:           "invite_delivery_not_approved",
+					},
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	client, err := NewClient(ClientConfig{BaseURL: server.URL, APIToken: "dev-token"})
+	if err != nil {
+		t.Fatalf("expected client, got error: %v", err)
+	}
+
+	invites, err := client.ListAccountInvites(context.Background(), "acct local/qr demo", map[string]string{
+		"role":                   "editor",
+		"status":                 "draft",
+		"invite_delivery_status": "not_sent",
+		"source_packet_id":       "local-qr-starter-demo",
+	})
+	if err != nil {
+		t.Fatalf("expected account invites, got error: %v", err)
+	}
+	if gotAuth != "Bearer dev-token" {
+		t.Fatalf("expected bearer token header, got %q", gotAuth)
+	}
+	if gotPath != "/v1/accounts/acct%20local%2Fqr%20demo/invites" {
+		t.Fatalf("expected escaped account invites path, got %q", gotPath)
+	}
+	if gotRole != "editor" {
+		t.Fatalf("expected role filter, got %q", gotRole)
+	}
+	if gotStatus != "draft" {
+		t.Fatalf("expected status filter, got %q", gotStatus)
+	}
+	if gotInviteDeliveryStatus != "not_sent" {
+		t.Fatalf("expected invite_delivery_status filter, got %q", gotInviteDeliveryStatus)
+	}
+	if gotSourcePacketID != "local-qr-starter-demo" {
+		t.Fatalf("expected source_packet_id filter, got %q", gotSourcePacketID)
+	}
+	if len(invites) != 1 || invites[0].ID != "inv_local_qr_demo_editor" {
+		t.Fatalf("unexpected account invites: %#v", invites)
+	}
+	if invites[0].ExternalEffectsEnabled || invites[0].Delivery.ExternalEffectPerformed {
+		t.Fatal("expected invite external effects to stay disabled")
+	}
+}
+
 func TestListAccountServicesRequiresAccountID(t *testing.T) {
 	client, err := NewClient(ClientConfig{BaseURL: "https://dev.cloud.linkridge.net", APIToken: "dev-token"})
 	if err != nil {

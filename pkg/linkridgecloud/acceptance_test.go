@@ -45,6 +45,35 @@ func TestAccClientReadOnlyDevSurface(t *testing.T) {
 		t.Fatal("expected draft account external effects to stay disabled")
 	}
 
+	memberships, err := client.ListAccountMemberships(ctx, "acct_local_qr_demo", map[string]string{
+		"user_id": "usr_local_qr_owner",
+		"role":    "owner",
+		"status":  "planned",
+	})
+	if err != nil {
+		t.Fatalf("list account memberships: %v", err)
+	}
+	if len(memberships) != 1 {
+		t.Fatalf("expected one planned membership, got %#v", memberships)
+	}
+	if memberships[0].InviteDeliveryStatus != "not_sent" {
+		t.Fatalf("expected membership invite delivery to stay not_sent, got %q", memberships[0].InviteDeliveryStatus)
+	}
+
+	invites, err := client.ListAccountInvites(ctx, "acct_local_qr_demo", map[string]string{
+		"role":                   "editor",
+		"status":                 "draft",
+		"invite_delivery_status": "not_sent",
+	})
+	if err != nil {
+		t.Fatalf("list account invites: %v", err)
+	}
+	for _, invite := range invites {
+		if invite.ExternalEffectsEnabled || invite.Delivery.ExternalEffectPerformed {
+			t.Fatalf("expected invite %q external delivery to stay disabled", invite.ID)
+		}
+	}
+
 	accountServices, err := client.ListAccountServices(ctx, "acct_local_qr_demo", map[string]string{
 		"id":     "asvc_local_qr_demo",
 		"status": "planned",

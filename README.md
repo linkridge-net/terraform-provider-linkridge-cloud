@@ -7,6 +7,8 @@ Terraform provider for the LinkRidge Cloud control-plane API.
 The first provider slice is intentionally read-only: it configures a
 Terraform Plugin Framework provider, creates a small LinkRidge Cloud API
 client, and exposes the `/v1/services`, `/v1/accounts`, and
+`/v1/accounts/{account_id}/memberships`,
+`/v1/accounts/{account_id}/invites`,
 `/v1/accounts/{account_id}/services`,
 `/v1/accounts/{account_id}/services/{account_service_id}/entitlements`,
 `/v1/accounts/{account_id}/services/{account_service_id}/activation-packets`,
@@ -16,17 +18,19 @@ client, and exposes the `/v1/services`, `/v1/accounts`, and
 `/v1/review-packets`, `/v1/audit-events`,
 `/v1/qr/workspaces`, and
 `/v1/qr/workspaces/{workspace_id}/import-jobs` list APIs through Terraform data
-sources. Entitlements expose effective local feature/limit evidence only;
-activation packets and provisioning runs expose review/rehearsal evidence only;
-service-token data is safe metadata only; QR import jobs expose plan/review
-status only; billing export, support case, and review packet data sources expose
-local operator evidence only; audit events expose append-only evidence only. The
-provider never returns token secret material, approves activation/provisioning,
-changes entitlements, syncs billing, replays audit events, executes imports,
-creates billing records, sends customer notifications, opens external support
-tickets, or enables hosted redirects. Draft resources will stay plan/dev-only until the
-LinkRidge Cloud API approval gates, tenant isolation, and durable audit contracts
-are ready for customer-visible effects.
+sources. Memberships expose role assignment evidence only; invites expose draft
+delivery metadata only; entitlements expose effective local feature/limit
+evidence only; activation packets and provisioning runs expose review/rehearsal
+evidence only; service-token data is safe metadata only; QR import jobs expose
+plan/review status only; billing export, support case, and review packet data
+sources expose local operator evidence only; audit events expose append-only
+evidence only. The provider never returns token secret material, sends invites,
+creates users, grants external access, approves activation/provisioning, changes
+entitlements, syncs billing, replays audit events, executes imports, creates
+billing records, sends customer notifications, opens external support tickets,
+or enables hosted redirects. Draft resources will stay plan/dev-only until the
+LinkRidge Cloud API approval gates, tenant isolation, and durable audit
+contracts are ready for customer-visible effects.
 
 <!-- badges-start -->
 [![DevRail compliant](https://devrail.dev/images/badge.svg)](https://devrail.dev)
@@ -49,6 +53,19 @@ data "linkridgecloud_services" "qr" {
 
 data "linkridgecloud_accounts" "draft" {
   status = "draft"
+}
+
+data "linkridgecloud_account_memberships" "owners" {
+  account_id = "acct_local_qr_demo"
+  role       = "owner"
+  status     = "planned"
+}
+
+data "linkridgecloud_account_invites" "draft_editors" {
+  account_id             = "acct_local_qr_demo"
+  role                   = "editor"
+  status                 = "draft"
+  invite_delivery_status = "not_sent"
 }
 
 data "linkridgecloud_account_services" "planned" {
@@ -139,8 +156,8 @@ LINKRIDGE_CLOUD_ACC=1 go test ./pkg/linkridgecloud -run TestAccClientReadOnlyDev
 
 The acceptance check only reads current `/v1` data and asserts the dev guardrails
 remain closed: no service-token secret material, activation/provisioning
-execution, billing export, support notification, import execution, or hosted QR
-redirect is enabled.
+execution, invite delivery, external account access, billing export, support
+notification, import execution, or hosted QR redirect is enabled.
 
 ## Usage
 

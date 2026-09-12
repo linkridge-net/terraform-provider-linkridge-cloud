@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   control-plane API.
 - Read-only `linkridgecloud_accounts` data source for `/v1/accounts` draft
   tenant planning records.
+- Read-only `linkridgecloud_account_memberships` data source for
+  `/v1/accounts/{account_id}/memberships` role assignment evidence without
+  user creation, invite delivery, external access, or role changes.
+- Read-only `linkridgecloud_account_invites` data source for
+  `/v1/accounts/{account_id}/invites` draft invite delivery evidence without
+  sending invites, notifying customers, or granting external identity access.
 - Read-only `linkridgecloud_account_services` data source for
   `/v1/accounts/{account_id}/services` service planning records.
 - Read-only `linkridgecloud_activation_packets` data source for safe
