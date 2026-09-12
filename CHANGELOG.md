@@ -28,6 +28,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   without import execution.
 - Read-only `linkridgecloud_qr_workspaces` data source for `/v1/qr/workspaces`
   QR service planning records.
+- Read-only `linkridgecloud_provisioning_runs` data source for
+  `/v1/provisioning-runs` rehearsal evidence without provisioning execution.
+- Read-only `linkridgecloud_billing_export_requests` data source for
+  `/v1/accounts/{account_id}/services/{account_service_id}/billing-export-requests`
+  review metadata without billing export.
+- Read-only `linkridgecloud_support_cases` data source for
+  `/v1/accounts/{account_id}/services/{account_service_id}/support-cases`
+  handoff metadata without external tickets or customer notifications.
+- Read-only `linkridgecloud_review_packets` data source for `/v1/review-packets`
+  normalized approval-gate evidence without approving or executing effects.
 
 ### Changed
 

@@ -12,17 +12,18 @@ client, and exposes the `/v1/services`, `/v1/accounts`, and
 `/v1/accounts/{account_id}/services/{account_service_id}/billing-export-requests`,
 `/v1/accounts/{account_id}/services/{account_service_id}/support-cases`,
 `/v1/accounts/{account_id}/service-tokens`, `/v1/provisioning-runs`,
+`/v1/review-packets`,
 `/v1/qr/workspaces`, and
 `/v1/qr/workspaces/{workspace_id}/import-jobs` list APIs through Terraform data
 sources. Activation packets and provisioning runs expose review/rehearsal
 evidence only; service-token data is safe metadata only; QR import jobs expose
-plan/review status only; billing export and support case data sources expose
-local review evidence only. The provider never returns token secret material,
-approves activation/provisioning, executes imports, creates billing records,
-sends customer notifications, opens external support tickets, or enables hosted
-redirects. Draft resources will stay plan/dev-only until the LinkRidge Cloud API
-approval gates, tenant isolation, and durable audit contracts are ready for
-customer-visible effects.
+plan/review status only; billing export, support case, and review packet data
+sources expose local operator evidence only. The provider never returns token
+secret material, approves activation/provisioning, executes imports, creates
+billing records, sends customer notifications, opens external support tickets,
+or enables hosted redirects. Draft resources will stay plan/dev-only until the
+LinkRidge Cloud API approval gates, tenant isolation, and durable audit contracts
+are ready for customer-visible effects.
 
 <!-- badges-start -->
 [![DevRail compliant](https://devrail.dev/images/badge.svg)](https://devrail.dev)
@@ -85,6 +86,12 @@ data "linkridgecloud_support_cases" "blocked_import_review" {
   account_service_id = "asvc_local_qr_demo"
   category           = "import_review"
   status             = "blocked"
+}
+
+data "linkridgecloud_review_packets" "service_token" {
+  account_id  = "acct_local_qr_demo"
+  packet_type = "service_token"
+  status      = "blocked_pending_matthew_approval"
 }
 
 data "linkridgecloud_service_tokens" "planned" {

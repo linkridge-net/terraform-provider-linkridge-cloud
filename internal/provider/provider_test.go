@@ -90,8 +90,8 @@ func TestValidateRequiredConfig(t *testing.T) {
 
 func TestProviderRegistersServicesDataSource(t *testing.T) {
 	dataSources := (&LinkRidgeCloudProvider{}).DataSources(context.Background())
-	if len(dataSources) != 10 {
-		t.Fatalf("expected 10 data sources, got %d", len(dataSources))
+	if len(dataSources) != 11 {
+		t.Fatalf("expected 11 data sources, got %d", len(dataSources))
 	}
 }
 
@@ -124,5 +124,17 @@ func TestStringFiltersDropsNullAndUnknownValues(t *testing.T) {
 	}
 	if _, ok := filters["status"]; ok {
 		t.Fatal("expected null status filter to be omitted")
+	}
+}
+
+func TestRawJSONValueOrNull(t *testing.T) {
+	if !rawJSONValueOrNull(nil).IsNull() {
+		t.Fatal("expected nil JSON to become null")
+	}
+	if !rawJSONValueOrNull([]byte("null")).IsNull() {
+		t.Fatal("expected null JSON to become null")
+	}
+	if got := rawJSONValueOrNull([]byte(`{"z": true, "a": 1}`)); got.ValueString() != `{"a":1,"z":true}` {
+		t.Fatalf("unexpected compact JSON value: %q", got.ValueString())
 	}
 }

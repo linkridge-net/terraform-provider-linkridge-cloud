@@ -826,6 +826,92 @@ func TestListSupportCasesSendsPathAndFilters(t *testing.T) {
 	}
 }
 
+func TestListReviewPacketsSendsFilters(t *testing.T) {
+	var gotAuth string
+	var gotID string
+	var gotAccountID string
+	var gotAccountServiceID string
+	var gotPacketType string
+	var gotStatus string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		gotID = r.URL.Query().Get("id")
+		gotAccountID = r.URL.Query().Get("account_id")
+		gotAccountServiceID = r.URL.Query().Get("account_service_id")
+		gotPacketType = r.URL.Query().Get("packet_type")
+		gotStatus = r.URL.Query().Get("status")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(reviewPacketsResponse{
+			Data: []ReviewPacket{
+				{
+					ID:               "rev_service_token_stok_local_qr_demo_agent_preview",
+					AccountID:        "acct_local_qr_demo",
+					AccountServiceID: "asvc_local_qr_demo",
+					ServiceID:        "qr-codes",
+					PacketType:       "service_token",
+					Status:           "blocked_pending_matthew_approval",
+					ApprovalRequired: "matthew",
+					RequestedByActor: ReviewActor{
+						Subject: "dev_control_plane",
+						UserID:  "usr_local_qr_owner",
+					},
+					ReviewChecks:           json.RawMessage(`{"scope_policy_checked":true,"external_effect_performed":false}`),
+					BlockedExternalActions: []string{"issue_secret_material", "enable_external_api_access"},
+					SourcePacketID:         "local-qr-starter-demo",
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	client, err := NewClient(ClientConfig{BaseURL: server.URL, APIToken: "dev-token"})
+	if err != nil {
+		t.Fatalf("expected client, got error: %v", err)
+	}
+
+	reviewPackets, err := client.ListReviewPackets(context.Background(), map[string]string{
+		"id":                 "rev_service_token_stok_local_qr_demo_agent_preview",
+		"account_id":         "acct_local_qr_demo",
+		"account_service_id": "asvc_local_qr_demo",
+		"packet_type":        "service_token",
+		"status":             "blocked_pending_matthew_approval",
+	})
+	if err != nil {
+		t.Fatalf("expected review packets, got error: %v", err)
+	}
+	if gotAuth != "Bearer dev-token" {
+		t.Fatalf("expected bearer token header, got %q", gotAuth)
+	}
+	if gotID != "rev_service_token_stok_local_qr_demo_agent_preview" {
+		t.Fatalf("expected id filter, got %q", gotID)
+	}
+	if gotAccountID != "acct_local_qr_demo" {
+		t.Fatalf("expected account_id filter, got %q", gotAccountID)
+	}
+	if gotAccountServiceID != "asvc_local_qr_demo" {
+		t.Fatalf("expected account_service_id filter, got %q", gotAccountServiceID)
+	}
+	if gotPacketType != "service_token" {
+		t.Fatalf("expected packet_type filter, got %q", gotPacketType)
+	}
+	if gotStatus != "blocked_pending_matthew_approval" {
+		t.Fatalf("expected status filter, got %q", gotStatus)
+	}
+	if len(reviewPackets) != 1 || reviewPackets[0].ID != "rev_service_token_stok_local_qr_demo_agent_preview" {
+		t.Fatalf("unexpected review packets: %#v", reviewPackets)
+	}
+	if reviewPackets[0].RequestedByActor.UserID != "usr_local_qr_owner" {
+		t.Fatalf("unexpected review actor: %#v", reviewPackets[0].RequestedByActor)
+	}
+	if string(reviewPackets[0].ReviewChecks) == "" {
+		t.Fatal("expected review checks evidence")
+	}
+	if len(reviewPackets[0].BlockedExternalActions) != 2 {
+		t.Fatalf("unexpected blocked actions: %#v", reviewPackets[0].BlockedExternalActions)
+	}
+}
+
 func TestListServicesReturnsHTTPError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "nope", http.StatusUnauthorized)

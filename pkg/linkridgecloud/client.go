@@ -242,6 +242,27 @@ type SupportCase struct {
 	} `json:"metadata"`
 }
 
+// ReviewPacket is the normalized operator-review evidence exposed by /v1/review-packets.
+type ReviewPacket struct {
+	ID                     string          `json:"id"`
+	AccountID              string          `json:"account_id"`
+	AccountServiceID       string          `json:"account_service_id"`
+	ServiceID              string          `json:"service_id"`
+	PacketType             string          `json:"packet_type"`
+	Status                 string          `json:"status"`
+	ApprovalRequired       string          `json:"approval_required"`
+	RequestedByActor       ReviewActor     `json:"requested_by_actor"`
+	ReviewChecks           json.RawMessage `json:"review_checks"`
+	BlockedExternalActions []string        `json:"blocked_external_actions"`
+	SourcePacketID         string          `json:"source_packet_id"`
+}
+
+// ReviewActor is the safe subset of an actor embedded in review evidence.
+type ReviewActor struct {
+	Subject string `json:"subject"`
+	UserID  string `json:"user_id"`
+}
+
 // ProvisioningRunResult supports file-backed string results and Postgres object results.
 type ProvisioningRunResult struct {
 	Result                string   `json:"result"`
@@ -306,6 +327,10 @@ type billingExportRequestsResponse struct {
 
 type supportCasesResponse struct {
 	Data []SupportCase `json:"data"`
+}
+
+type reviewPacketsResponse struct {
+	Data []ReviewPacket `json:"data"`
 }
 
 // NewClient creates a LinkRidge Cloud client.
@@ -632,6 +657,31 @@ func (c *Client) ListSupportCases(ctx context.Context, accountID string, account
 	}
 	if result.Data == nil {
 		return []SupportCase{}, nil
+	}
+
+	return result.Data, nil
+}
+
+// ListReviewPackets returns normalized internal review packets for approval-gated work. filters are optional.
+func (c *Client) ListReviewPackets(ctx context.Context, filters map[string]string) ([]ReviewPacket, error) {
+	endpoint := c.listEndpoint("/v1/review-packets", filters)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create review packets request: %w", err)
+	}
+	resp, err := c.doJSON(req, "list review packets")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var result reviewPacketsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode review packets response: %w", err)
+	}
+	if result.Data == nil {
+		return []ReviewPacket{}, nil
 	}
 
 	return result.Data, nil
