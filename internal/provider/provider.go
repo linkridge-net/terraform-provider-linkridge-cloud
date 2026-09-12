@@ -129,6 +129,7 @@ func (p *LinkRidgeCloudProvider) Resources(_ context.Context) []func() resource.
 // DataSources returns the list of data source types supported by this provider.
 func (p *LinkRidgeCloudProvider) DataSources(_ context.Context) []func() datasource.DataSource {
 	return []func() datasource.DataSource{
+		NewAccountServicesDataSource,
 		NewAccountsDataSource,
 		NewQRWorkspacesDataSource,
 		NewServicesDataSource,

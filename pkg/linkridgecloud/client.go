@@ -49,6 +49,19 @@ type Account struct {
 	ExternalEffectsEnabled bool   `json:"external_effects_enabled"`
 }
 
+// AccountService is the subset of the /v1/accounts/{account_id}/services representation exposed by the provider.
+type AccountService struct {
+	ID                     string `json:"id"`
+	AccountID              string `json:"account_id"`
+	ServiceID              string `json:"service_id"`
+	PlanID                 string `json:"plan_id"`
+	PlanKey                string `json:"plan_key"`
+	Status                 string `json:"status"`
+	ApprovalRequired       bool   `json:"approval_required"`
+	SourcePacketID         string `json:"source_packet_id"`
+	ExternalEffectsEnabled bool   `json:"external_effects_enabled"`
+}
+
 // QRWorkspace is the subset of the /v1/qr/workspaces representation exposed by the provider.
 type QRWorkspace struct {
 	ID                       string `json:"id"`
@@ -67,6 +80,10 @@ type servicesResponse struct {
 
 type accountsResponse struct {
 	Data []Account `json:"data"`
+}
+
+type accountServicesResponse struct {
+	Data []AccountService `json:"data"`
 }
 
 type qrWorkspacesResponse struct {
@@ -155,6 +172,36 @@ func (c *Client) ListAccounts(ctx context.Context, id string, status string) ([]
 	}
 	if result.Data == nil {
 		return []Account{}, nil
+	}
+
+	return result.Data, nil
+}
+
+// ListAccountServices returns service planning records for an account. accountID is required.
+func (c *Client) ListAccountServices(ctx context.Context, accountID string, filters map[string]string) ([]AccountService, error) {
+	accountID = strings.TrimSpace(accountID)
+	if accountID == "" {
+		return nil, fmt.Errorf("account ID is required")
+	}
+
+	endpoint := c.listEndpoint("/v1/accounts/"+url.PathEscape(accountID)+"/services", filters)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create account services request: %w", err)
+	}
+	resp, err := c.doJSON(req, "list account services")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var result accountServicesResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode account services response: %w", err)
+	}
+	if result.Data == nil {
+		return []AccountService{}, nil
 	}
 
 	return result.Data, nil

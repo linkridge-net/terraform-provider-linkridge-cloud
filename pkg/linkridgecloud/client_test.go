@@ -113,6 +113,82 @@ func TestListAccountsSendsFilters(t *testing.T) {
 	}
 }
 
+func TestListAccountServicesRequiresAccountID(t *testing.T) {
+	client, err := NewClient(ClientConfig{BaseURL: "https://dev.cloud.linkridge.net", APIToken: "dev-token"})
+	if err != nil {
+		t.Fatalf("expected client, got error: %v", err)
+	}
+
+	if _, err := client.ListAccountServices(context.Background(), "", nil); err == nil {
+		t.Fatal("expected missing account ID error")
+	}
+}
+
+func TestListAccountServicesSendsPathAndFilters(t *testing.T) {
+	var gotAuth string
+	var gotPath string
+	var gotID string
+	var gotStatus string
+	var gotPlanKey string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		gotPath = r.URL.EscapedPath()
+		gotID = r.URL.Query().Get("id")
+		gotStatus = r.URL.Query().Get("status")
+		gotPlanKey = r.URL.Query().Get("plan_key")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(accountServicesResponse{
+			Data: []AccountService{
+				{
+					ID:                     "asvc_local_qr_demo",
+					AccountID:              "acct local/qr demo",
+					ServiceID:              "qr-codes",
+					PlanID:                 "starter",
+					PlanKey:                "starter",
+					Status:                 "planned",
+					ApprovalRequired:       true,
+					SourcePacketID:         "local-qr-starter-demo",
+					ExternalEffectsEnabled: false,
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	client, err := NewClient(ClientConfig{BaseURL: server.URL, APIToken: "dev-token"})
+	if err != nil {
+		t.Fatalf("expected client, got error: %v", err)
+	}
+
+	accountServices, err := client.ListAccountServices(context.Background(), "acct local/qr demo", map[string]string{
+		"id":       "asvc_local_qr_demo",
+		"status":   "planned",
+		"plan_key": "starter",
+	})
+	if err != nil {
+		t.Fatalf("expected account services, got error: %v", err)
+	}
+	if gotAuth != "Bearer dev-token" {
+		t.Fatalf("expected bearer token header, got %q", gotAuth)
+	}
+	if gotPath != "/v1/accounts/acct%20local%2Fqr%20demo/services" {
+		t.Fatalf("expected escaped account services path, got %q", gotPath)
+	}
+	if gotID != "asvc_local_qr_demo" {
+		t.Fatalf("expected id filter, got %q", gotID)
+	}
+	if gotStatus != "planned" {
+		t.Fatalf("expected status filter, got %q", gotStatus)
+	}
+	if gotPlanKey != "starter" {
+		t.Fatalf("expected plan_key filter, got %q", gotPlanKey)
+	}
+	if len(accountServices) != 1 || accountServices[0].ID != "asvc_local_qr_demo" {
+		t.Fatalf("unexpected account services: %#v", accountServices)
+	}
+}
+
 func TestListQRWorkspacesSendsFilters(t *testing.T) {
 	var gotAccountID string
 	var gotAccountServiceID string
