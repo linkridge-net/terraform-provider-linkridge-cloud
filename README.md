@@ -15,7 +15,7 @@ client, and exposes the `/v1/services`, `/v1/accounts`, and
 `/v1/accounts/{account_id}/services/{account_service_id}/billing-export-requests`,
 `/v1/accounts/{account_id}/services/{account_service_id}/support-cases`,
 `/v1/accounts/{account_id}/service-tokens`, `/v1/provisioning-runs`,
-`/v1/review-packets`, `/v1/audit-events`,
+`/v1/review-packets`, `/v1/operator-approvals`, `/v1/audit-events`,
 `/v1/qr/workspaces`, and
 `/v1/qr/workspaces/{workspace_id}/import-jobs` list APIs through Terraform data
 sources. Memberships expose role assignment evidence only; invites expose draft
@@ -24,13 +24,15 @@ evidence only; activation packets and provisioning runs expose review/rehearsal
 evidence only; service-token data is safe metadata only; QR import jobs expose
 plan/review status only; billing export, support case, and review packet data
 sources expose local operator evidence only; audit events expose append-only
-evidence only. The provider never returns token secret material, sends invites,
-creates users, grants external access, approves activation/provisioning, changes
+evidence only; operator approvals expose decision evidence only. The provider
+never returns token secret material, sends invites, creates users, grants
+external access, approves or rejects activation/provisioning, changes
 entitlements, syncs billing, replays audit events, executes imports, creates
 billing records, sends customer notifications, opens external support tickets,
-or enables hosted redirects. Draft resources will stay plan/dev-only until the
-LinkRidge Cloud API approval gates, tenant isolation, and durable audit
-contracts are ready for customer-visible effects.
+configures DNS, runs production deploys, or enables hosted redirects. Draft
+resources will stay plan/dev-only until the LinkRidge Cloud API approval gates,
+tenant isolation, and durable audit contracts are ready for customer-visible
+effects.
 
 <!-- badges-start -->
 [![DevRail compliant](https://devrail.dev/images/badge.svg)](https://devrail.dev)
@@ -120,6 +122,12 @@ data "linkridgecloud_review_packets" "service_token" {
   status      = "blocked_pending_matthew_approval"
 }
 
+data "linkridgecloud_operator_approvals" "blocked" {
+  account_id        = "acct_local_qr_demo"
+  decision_state    = "blocked"
+  required_approval = "matthew"
+}
+
 data "linkridgecloud_audit_events" "service_token_prepare" {
   account_id       = "acct_local_qr_demo"
   action           = "service_token.prepare"
@@ -157,7 +165,8 @@ LINKRIDGE_CLOUD_ACC=1 go test ./pkg/linkridgecloud -run TestAccClientReadOnlyDev
 The acceptance check only reads current `/v1` data and asserts the dev guardrails
 remain closed: no service-token secret material, activation/provisioning
 execution, invite delivery, external account access, billing export, support
-notification, import execution, or hosted QR redirect is enabled.
+notification, operator approval execution, import execution, production deploy,
+or hosted QR redirect is enabled.
 
 ## Usage
 

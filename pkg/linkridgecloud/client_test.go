@@ -1276,6 +1276,100 @@ func TestListServicesReturnsHTTPError(t *testing.T) {
 	}
 }
 
+func TestListOperatorApprovalsSendsFilters(t *testing.T) {
+	var gotAuth string
+	var gotAccountID string
+	var gotAccountServiceID string
+	var gotServiceID string
+	var gotDecisionID string
+	var gotDecisionState string
+	var gotRequiredApproval string
+	var gotSourcePacketID string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		gotAccountID = r.URL.Query().Get("account_id")
+		gotAccountServiceID = r.URL.Query().Get("account_service_id")
+		gotServiceID = r.URL.Query().Get("service_id")
+		gotDecisionID = r.URL.Query().Get("decision_id")
+		gotDecisionState = r.URL.Query().Get("decision_state")
+		gotRequiredApproval = r.URL.Query().Get("required_approval")
+		gotSourcePacketID = r.URL.Query().Get("source_packet_id")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(operatorApprovalsResponse{
+			Data: []OperatorApproval{
+				{
+					Status:           "blocked_pending_matthew_approval",
+					DecisionID:       "opd_local_qr_demo_001",
+					AccountID:        "acct_local_qr_demo",
+					AccountServiceID: "asvc_local_qr_demo",
+					ServiceID:        "qr-codes",
+					QRWorkspaceID:    "qrw_local_demo",
+					DecisionState:    "blocked",
+					RequiredApproval: "matthew",
+					ApprovedActions:  []string{},
+					BlockedActions:   []string{"create_billing_customer", "run_production_deploy"},
+					AuditEventAction: "account_service.operator_decision_blocked",
+					Result:           "not_executed",
+					SourcePacketID:   "local-qr-starter-demo",
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	client, err := NewClient(ClientConfig{BaseURL: server.URL, APIToken: "dev-token"})
+	if err != nil {
+		t.Fatalf("expected client, got error: %v", err)
+	}
+
+	operatorApprovals, err := client.ListOperatorApprovals(context.Background(), map[string]string{
+		"account_id":         "acct_local_qr_demo",
+		"account_service_id": "asvc_local_qr_demo",
+		"service_id":         "qr-codes",
+		"decision_id":        "opd_local_qr_demo_001",
+		"decision_state":     "blocked",
+		"required_approval":  "matthew",
+		"source_packet_id":   "local-qr-starter-demo",
+	})
+	if err != nil {
+		t.Fatalf("expected operator approvals, got error: %v", err)
+	}
+	if gotAuth != "Bearer dev-token" {
+		t.Fatalf("expected bearer token header, got %q", gotAuth)
+	}
+	if gotAccountID != "acct_local_qr_demo" {
+		t.Fatalf("expected account_id filter, got %q", gotAccountID)
+	}
+	if gotAccountServiceID != "asvc_local_qr_demo" {
+		t.Fatalf("expected account_service_id filter, got %q", gotAccountServiceID)
+	}
+	if gotServiceID != "qr-codes" {
+		t.Fatalf("expected service_id filter, got %q", gotServiceID)
+	}
+	if gotDecisionID != "opd_local_qr_demo_001" {
+		t.Fatalf("expected decision_id filter, got %q", gotDecisionID)
+	}
+	if gotDecisionState != "blocked" {
+		t.Fatalf("expected decision_state filter, got %q", gotDecisionState)
+	}
+	if gotRequiredApproval != "matthew" {
+		t.Fatalf("expected required_approval filter, got %q", gotRequiredApproval)
+	}
+	if gotSourcePacketID != "local-qr-starter-demo" {
+		t.Fatalf("expected source_packet_id filter, got %q", gotSourcePacketID)
+	}
+	if len(operatorApprovals) != 1 || operatorApprovals[0].DecisionID != "opd_local_qr_demo_001" {
+		t.Fatalf("unexpected operator approvals: %#v", operatorApprovals)
+	}
+	if operatorApprovals[0].Result != "not_executed" {
+		t.Fatalf("unexpected operator approval result: %q", operatorApprovals[0].Result)
+	}
+	if len(operatorApprovals[0].BlockedActions) != 2 {
+		t.Fatalf("unexpected blocked actions: %#v", operatorApprovals[0].BlockedActions)
+	}
+}
+
 func TestListServicesFormatsProblemError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/problem+json")

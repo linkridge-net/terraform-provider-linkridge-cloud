@@ -208,6 +208,26 @@ func TestAccClientReadOnlyDevSurface(t *testing.T) {
 		t.Fatal("expected blocked review packet evidence")
 	}
 
+	operatorApprovals, err := client.ListOperatorApprovals(ctx, map[string]string{
+		"account_id":        "acct_local_qr_demo",
+		"decision_state":    "blocked",
+		"required_approval": "matthew",
+	})
+	if err != nil {
+		t.Fatalf("list operator approvals: %v", err)
+	}
+	if len(operatorApprovals) == 0 {
+		t.Fatal("expected blocked operator approval evidence")
+	}
+	for _, approval := range operatorApprovals {
+		if approval.DecisionState != "blocked" {
+			t.Fatalf("expected operator approval %q to stay blocked, got %q", approval.DecisionID, approval.DecisionState)
+		}
+		if approval.Result != "not_executed" {
+			t.Fatalf("expected operator approval %q to remain unexecuted, got %q", approval.DecisionID, approval.Result)
+		}
+	}
+
 	auditEvents, err := client.ListAuditEvents(ctx, map[string]string{
 		"account_id":       "acct_local_qr_demo",
 		"source_packet_id": "local-qr-starter-demo",

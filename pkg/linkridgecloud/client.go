@@ -324,6 +324,25 @@ type AuditEvent struct {
 	SourcePacketID   string          `json:"source_packet_id"`
 }
 
+// OperatorApproval is the safe operator decision evidence exposed by /v1/operator-approvals.
+type OperatorApproval struct {
+	Status           string   `json:"status"`
+	DecisionID       string   `json:"decision_id"`
+	SourcePacketID   string   `json:"source_packet_id"`
+	AccountID        string   `json:"account_id"`
+	AccountServiceID string   `json:"account_service_id"`
+	ServiceID        string   `json:"service_id"`
+	QRWorkspaceID    string   `json:"qr_workspace_id"`
+	ReviewerUserID   string   `json:"reviewer_user_id"`
+	DecidedAt        string   `json:"decided_at"`
+	DecisionState    string   `json:"decision_state"`
+	RequiredApproval string   `json:"required_approval"`
+	ApprovedActions  []string `json:"approved_actions"`
+	BlockedActions   []string `json:"blocked_actions"`
+	AuditEventAction string   `json:"audit_event_action"`
+	Result           string   `json:"result"`
+}
+
 // ReviewActor is the safe subset of an actor embedded in review evidence.
 type ReviewActor struct {
 	Subject string `json:"subject"`
@@ -414,6 +433,10 @@ type reviewPacketsResponse struct {
 
 type auditEventsResponse struct {
 	Data []AuditEvent `json:"data"`
+}
+
+type operatorApprovalsResponse struct {
+	Data []OperatorApproval `json:"data"`
 }
 
 type problemDetails struct {
@@ -894,6 +917,31 @@ func (c *Client) ListAuditEvents(ctx context.Context, filters map[string]string)
 	}
 	if result.Data == nil {
 		return []AuditEvent{}, nil
+	}
+
+	return result.Data, nil
+}
+
+// ListOperatorApprovals returns safe operator decision evidence. filters are optional.
+func (c *Client) ListOperatorApprovals(ctx context.Context, filters map[string]string) ([]OperatorApproval, error) {
+	endpoint := c.listEndpoint("/v1/operator-approvals", filters)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create operator approvals request: %w", err)
+	}
+	resp, err := c.doJSON(req, "list operator approvals")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var result operatorApprovalsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode operator approvals response: %w", err)
+	}
+	if result.Data == nil {
+		return []OperatorApproval{}, nil
 	}
 
 	return result.Data, nil
