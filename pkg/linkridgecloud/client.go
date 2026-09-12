@@ -184,6 +184,64 @@ type ProvisioningRun struct {
 	ExternalEffectsEnabled     bool                  `json:"external_effects_enabled"`
 }
 
+// BillingExportRequest is the safe billing-review subset exposed by the provider.
+type BillingExportRequest struct {
+	ID                    string   `json:"id"`
+	AccountID             string   `json:"account_id"`
+	AccountServiceID      string   `json:"account_service_id"`
+	ServiceID             string   `json:"service_id"`
+	ScanEventIDs          []string `json:"scan_event_ids"`
+	Quantity              int64    `json:"quantity"`
+	Billable              bool     `json:"billable"`
+	Status                string   `json:"status"`
+	RequestedByUserID     string   `json:"requested_by_user_id"`
+	RequestedAt           string   `json:"requested_at"`
+	ExportedAt            string   `json:"exported_at"`
+	SourcePacketID        string   `json:"source_packet_id"`
+	ExternalExportEnabled bool     `json:"external_export_enabled"`
+	Metadata              struct {
+		BillingCustomerID     string `json:"billing_customer_id"`
+		BillingSubscriptionID string `json:"billing_subscription_id"`
+		ExternalUsageRecordID string `json:"external_usage_record_id"`
+		ExportDestination     string `json:"export_destination"`
+		ApprovalRequired      string `json:"approval_required"`
+		BlockedReason         string `json:"blocked_reason"`
+	} `json:"metadata"`
+}
+
+// SupportCase is the safe support-handoff subset exposed by the provider.
+type SupportCase struct {
+	ID                       string `json:"id"`
+	AccountID                string `json:"account_id"`
+	AccountServiceID         string `json:"account_service_id"`
+	QRWorkspaceID            string `json:"qr_workspace_id"`
+	ServiceID                string `json:"service_id"`
+	TargetType               string `json:"target_type"`
+	TargetID                 string `json:"target_id"`
+	Category                 string `json:"category"`
+	Severity                 string `json:"severity"`
+	Status                   string `json:"status"`
+	Subject                  string `json:"subject"`
+	CreatedByUserID          string `json:"created_by_user_id"`
+	CreatedAt                string `json:"created_at"`
+	ResolvedAt               string `json:"resolved_at"`
+	SourcePacketID           string `json:"source_packet_id"`
+	CustomerVisible          bool   `json:"customer_visible"`
+	ExternalNotificationSent bool   `json:"external_notification_sent"`
+	ExternalTicketCreated    bool   `json:"external_ticket_created"`
+	Metadata                 struct {
+		QRCodeID                 string   `json:"qr_code_id"`
+		Slug                     string   `json:"slug"`
+		CustomerVisible          bool     `json:"customer_visible"`
+		ExternalTicketID         string   `json:"external_ticket_id"`
+		ExternalNotificationSent bool     `json:"external_notification_sent"`
+		EscalationPerformed      bool     `json:"escalation_performed"`
+		ApprovalRequired         string   `json:"approval_required"`
+		BlockedReason            string   `json:"blocked_reason"`
+		BlockedExternalActions   []string `json:"blocked_external_actions"`
+	} `json:"metadata"`
+}
+
 // ProvisioningRunResult supports file-backed string results and Postgres object results.
 type ProvisioningRunResult struct {
 	Result                string   `json:"result"`
@@ -240,6 +298,14 @@ type activationPacketsResponse struct {
 
 type provisioningRunsResponse struct {
 	Data []ProvisioningRun `json:"data"`
+}
+
+type billingExportRequestsResponse struct {
+	Data []BillingExportRequest `json:"data"`
+}
+
+type supportCasesResponse struct {
+	Data []SupportCase `json:"data"`
 }
 
 // NewClient creates a LinkRidge Cloud client.
@@ -498,6 +564,74 @@ func (c *Client) ListProvisioningRuns(ctx context.Context, filters map[string]st
 	}
 	if result.Data == nil {
 		return []ProvisioningRun{}, nil
+	}
+
+	return result.Data, nil
+}
+
+// ListBillingExportRequests returns safe billing export review metadata. accountID and accountServiceID are required.
+func (c *Client) ListBillingExportRequests(ctx context.Context, accountID string, accountServiceID string, filters map[string]string) ([]BillingExportRequest, error) {
+	accountID = strings.TrimSpace(accountID)
+	if accountID == "" {
+		return nil, fmt.Errorf("account ID is required")
+	}
+	accountServiceID = strings.TrimSpace(accountServiceID)
+	if accountServiceID == "" {
+		return nil, fmt.Errorf("account service ID is required")
+	}
+
+	endpoint := c.listEndpoint("/v1/accounts/"+url.PathEscape(accountID)+"/services/"+url.PathEscape(accountServiceID)+"/billing-export-requests", filters)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create billing export requests request: %w", err)
+	}
+	resp, err := c.doJSON(req, "list billing export requests")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var result billingExportRequestsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode billing export requests response: %w", err)
+	}
+	if result.Data == nil {
+		return []BillingExportRequest{}, nil
+	}
+
+	return result.Data, nil
+}
+
+// ListSupportCases returns safe support handoff metadata. accountID and accountServiceID are required.
+func (c *Client) ListSupportCases(ctx context.Context, accountID string, accountServiceID string, filters map[string]string) ([]SupportCase, error) {
+	accountID = strings.TrimSpace(accountID)
+	if accountID == "" {
+		return nil, fmt.Errorf("account ID is required")
+	}
+	accountServiceID = strings.TrimSpace(accountServiceID)
+	if accountServiceID == "" {
+		return nil, fmt.Errorf("account service ID is required")
+	}
+
+	endpoint := c.listEndpoint("/v1/accounts/"+url.PathEscape(accountID)+"/services/"+url.PathEscape(accountServiceID)+"/support-cases", filters)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create support cases request: %w", err)
+	}
+	resp, err := c.doJSON(req, "list support cases")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var result supportCasesResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode support cases response: %w", err)
+	}
+	if result.Data == nil {
+		return []SupportCase{}, nil
 	}
 
 	return result.Data, nil

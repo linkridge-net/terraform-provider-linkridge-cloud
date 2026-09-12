@@ -9,13 +9,17 @@ Terraform Plugin Framework provider, creates a small LinkRidge Cloud API
 client, and exposes the `/v1/services`, `/v1/accounts`, and
 `/v1/accounts/{account_id}/services`,
 `/v1/accounts/{account_id}/services/{account_service_id}/activation-packets`,
+`/v1/accounts/{account_id}/services/{account_service_id}/billing-export-requests`,
+`/v1/accounts/{account_id}/services/{account_service_id}/support-cases`,
 `/v1/accounts/{account_id}/service-tokens`, `/v1/provisioning-runs`,
 `/v1/qr/workspaces`, and
 `/v1/qr/workspaces/{workspace_id}/import-jobs` list APIs through Terraform data
 sources. Activation packets and provisioning runs expose review/rehearsal
 evidence only; service-token data is safe metadata only; QR import jobs expose
-plan/review status only; the provider never returns token secret material,
-approves activation/provisioning, executes imports, or enables hosted
+plan/review status only; billing export and support case data sources expose
+local review evidence only. The provider never returns token secret material,
+approves activation/provisioning, executes imports, creates billing records,
+sends customer notifications, opens external support tickets, or enables hosted
 redirects. Draft resources will stay plan/dev-only until the LinkRidge Cloud API
 approval gates, tenant isolation, and durable audit contracts are ready for
 customer-visible effects.
@@ -68,6 +72,19 @@ data "linkridgecloud_qr_import_jobs" "planned" {
 data "linkridgecloud_provisioning_runs" "rehearsal" {
   account_service_id = "asvc_local_qr_demo"
   status             = "rehearsal_only"
+}
+
+data "linkridgecloud_billing_export_requests" "blocked" {
+  account_id         = "acct_local_qr_demo"
+  account_service_id = "asvc_local_qr_demo"
+  status             = "blocked"
+}
+
+data "linkridgecloud_support_cases" "blocked_import_review" {
+  account_id         = "acct_local_qr_demo"
+  account_service_id = "asvc_local_qr_demo"
+  category           = "import_review"
+  status             = "blocked"
 }
 
 data "linkridgecloud_service_tokens" "planned" {

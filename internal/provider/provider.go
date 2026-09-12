@@ -132,11 +132,13 @@ func (p *LinkRidgeCloudProvider) DataSources(_ context.Context) []func() datasou
 		NewActivationPacketsDataSource,
 		NewAccountServicesDataSource,
 		NewAccountsDataSource,
+		NewBillingExportRequestsDataSource,
 		NewProvisioningRunsDataSource,
 		NewQRImportJobsDataSource,
 		NewQRWorkspacesDataSource,
 		NewServiceTokensDataSource,
 		NewServicesDataSource,
+		NewSupportCasesDataSource,
 	}
 }
 

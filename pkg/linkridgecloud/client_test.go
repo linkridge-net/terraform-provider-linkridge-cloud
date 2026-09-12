@@ -647,6 +647,185 @@ func TestProvisioningRunResultDecodesStringShape(t *testing.T) {
 	}
 }
 
+func TestListBillingExportRequestsSendsPathAndFilters(t *testing.T) {
+	var gotAuth string
+	var gotPath string
+	var gotID string
+	var gotStatus string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		gotPath = r.URL.EscapedPath()
+		gotID = r.URL.Query().Get("id")
+		gotStatus = r.URL.Query().Get("status")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(billingExportRequestsResponse{
+			Data: []BillingExportRequest{
+				{
+					ID:                    "qrbill_local_demo_scan_review",
+					AccountID:             "acct local/qr demo",
+					AccountServiceID:      "asvc local/qr demo",
+					ServiceID:             "qr-codes",
+					ScanEventIDs:          []string{"qrs_local_demo_welcome_planned"},
+					Quantity:              1,
+					Billable:              false,
+					Status:                "blocked",
+					RequestedByUserID:     "usr_local_qr_owner",
+					SourcePacketID:        "local-qr-starter-demo",
+					ExternalExportEnabled: false,
+					Metadata: struct {
+						BillingCustomerID     string `json:"billing_customer_id"`
+						BillingSubscriptionID string `json:"billing_subscription_id"`
+						ExternalUsageRecordID string `json:"external_usage_record_id"`
+						ExportDestination     string `json:"export_destination"`
+						ApprovalRequired      string `json:"approval_required"`
+						BlockedReason         string `json:"blocked_reason"`
+					}{
+						ApprovalRequired: "matthew",
+						BlockedReason:    "billing_export_not_approved",
+					},
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	client, err := NewClient(ClientConfig{BaseURL: server.URL, APIToken: "dev-token"})
+	if err != nil {
+		t.Fatalf("expected client, got error: %v", err)
+	}
+
+	requests, err := client.ListBillingExportRequests(context.Background(), "acct local/qr demo", "asvc local/qr demo", map[string]string{
+		"id":     "qrbill_local_demo_scan_review",
+		"status": "blocked",
+	})
+	if err != nil {
+		t.Fatalf("expected billing export requests, got error: %v", err)
+	}
+	if gotAuth != "Bearer dev-token" {
+		t.Fatalf("expected bearer token header, got %q", gotAuth)
+	}
+	if gotPath != "/v1/accounts/acct%20local%2Fqr%20demo/services/asvc%20local%2Fqr%20demo/billing-export-requests" {
+		t.Fatalf("expected escaped billing export requests path, got %q", gotPath)
+	}
+	if gotID != "qrbill_local_demo_scan_review" {
+		t.Fatalf("expected id filter, got %q", gotID)
+	}
+	if gotStatus != "blocked" {
+		t.Fatalf("expected status filter, got %q", gotStatus)
+	}
+	if len(requests) != 1 || requests[0].ID != "qrbill_local_demo_scan_review" {
+		t.Fatalf("unexpected billing export requests: %#v", requests)
+	}
+	if requests[0].Billable {
+		t.Fatal("expected billing export request to report non-billable usage")
+	}
+	if requests[0].ExternalExportEnabled {
+		t.Fatal("expected billing export request to report external export disabled")
+	}
+}
+
+func TestListSupportCasesSendsPathAndFilters(t *testing.T) {
+	var gotAuth string
+	var gotPath string
+	var gotID string
+	var gotCategory string
+	var gotSeverity string
+	var gotStatus string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		gotPath = r.URL.EscapedPath()
+		gotID = r.URL.Query().Get("id")
+		gotCategory = r.URL.Query().Get("category")
+		gotSeverity = r.URL.Query().Get("severity")
+		gotStatus = r.URL.Query().Get("status")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(supportCasesResponse{
+			Data: []SupportCase{
+				{
+					ID:                       "qrsup_local_demo_import_review",
+					AccountID:                "acct local/qr demo",
+					AccountServiceID:         "asvc local/qr demo",
+					QRWorkspaceID:            "qrw_local_demo",
+					ServiceID:                "qr-codes",
+					TargetType:               "qr_import_job",
+					TargetID:                 "qrimp_local_demo_open_qr_links",
+					Category:                 "import_review",
+					Severity:                 "low",
+					Status:                   "blocked",
+					Subject:                  "Review Starter Open QR import before tenant writes",
+					CreatedByUserID:          "usr_local_qr_owner",
+					SourcePacketID:           "local-qr-starter-demo",
+					CustomerVisible:          false,
+					ExternalNotificationSent: false,
+					ExternalTicketCreated:    false,
+					Metadata: struct {
+						QRCodeID                 string   `json:"qr_code_id"`
+						Slug                     string   `json:"slug"`
+						CustomerVisible          bool     `json:"customer_visible"`
+						ExternalTicketID         string   `json:"external_ticket_id"`
+						ExternalNotificationSent bool     `json:"external_notification_sent"`
+						EscalationPerformed      bool     `json:"escalation_performed"`
+						ApprovalRequired         string   `json:"approval_required"`
+						BlockedReason            string   `json:"blocked_reason"`
+						BlockedExternalActions   []string `json:"blocked_external_actions"`
+					}{
+						QRCodeID:               "qrc_local_demo_welcome",
+						Slug:                   "welcome",
+						ApprovalRequired:       "matthew",
+						BlockedReason:          "support_case_external_action_not_approved",
+						BlockedExternalActions: []string{"create_external_ticket", "send_customer_notification"},
+					},
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	client, err := NewClient(ClientConfig{BaseURL: server.URL, APIToken: "dev-token"})
+	if err != nil {
+		t.Fatalf("expected client, got error: %v", err)
+	}
+
+	supportCases, err := client.ListSupportCases(context.Background(), "acct local/qr demo", "asvc local/qr demo", map[string]string{
+		"id":       "qrsup_local_demo_import_review",
+		"category": "import_review",
+		"severity": "low",
+		"status":   "blocked",
+	})
+	if err != nil {
+		t.Fatalf("expected support cases, got error: %v", err)
+	}
+	if gotAuth != "Bearer dev-token" {
+		t.Fatalf("expected bearer token header, got %q", gotAuth)
+	}
+	if gotPath != "/v1/accounts/acct%20local%2Fqr%20demo/services/asvc%20local%2Fqr%20demo/support-cases" {
+		t.Fatalf("expected escaped support cases path, got %q", gotPath)
+	}
+	if gotID != "qrsup_local_demo_import_review" {
+		t.Fatalf("expected id filter, got %q", gotID)
+	}
+	if gotCategory != "import_review" {
+		t.Fatalf("expected category filter, got %q", gotCategory)
+	}
+	if gotSeverity != "low" {
+		t.Fatalf("expected severity filter, got %q", gotSeverity)
+	}
+	if gotStatus != "blocked" {
+		t.Fatalf("expected status filter, got %q", gotStatus)
+	}
+	if len(supportCases) != 1 || supportCases[0].ID != "qrsup_local_demo_import_review" {
+		t.Fatalf("unexpected support cases: %#v", supportCases)
+	}
+	if supportCases[0].CustomerVisible {
+		t.Fatal("expected support case to report customer visibility disabled")
+	}
+	if supportCases[0].ExternalTicketCreated {
+		t.Fatal("expected support case to report no external ticket")
+	}
+}
+
 func TestListServicesReturnsHTTPError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "nope", http.StatusUnauthorized)
