@@ -6,10 +6,10 @@ Terraform provider for the LinkRidge Cloud control-plane API.
 
 The first provider slice is intentionally read-only: it configures a
 Terraform Plugin Framework provider, creates a small LinkRidge Cloud API
-client, and exposes the `/v1/services` catalog through
-`data.linkridgecloud_services`. Draft resources will stay plan/dev-only until
-the LinkRidge Cloud API approval gates, tenant isolation, and durable audit
-contracts are ready for customer-visible effects.
+client, and exposes the `/v1/services`, `/v1/accounts`, and
+`/v1/qr/workspaces` list APIs through Terraform data sources. Draft resources
+will stay plan/dev-only until the LinkRidge Cloud API approval gates, tenant
+isolation, and durable audit contracts are ready for customer-visible effects.
 
 <!-- badges-start -->
 [![DevRail compliant](https://devrail.dev/images/badge.svg)](https://devrail.dev)
@@ -28,6 +28,15 @@ provider "linkridgecloud" {
 
 data "linkridgecloud_services" "qr" {
   id = "qr-codes"
+}
+
+data "linkridgecloud_accounts" "draft" {
+  status = "draft"
+}
+
+data "linkridgecloud_qr_workspaces" "planned" {
+  account_id = "acct_local_qr_demo"
+  status     = "planned"
 }
 ```
 

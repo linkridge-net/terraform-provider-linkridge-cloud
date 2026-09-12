@@ -65,6 +65,108 @@ func TestListServicesSendsBearerTokenAndFilter(t *testing.T) {
 	}
 }
 
+func TestListAccountsSendsFilters(t *testing.T) {
+	var gotAuth string
+	var gotID string
+	var gotStatus string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		gotID = r.URL.Query().Get("id")
+		gotStatus = r.URL.Query().Get("status")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(accountsResponse{
+			Data: []Account{
+				{
+					ID:                     "acct_local_qr_demo",
+					Name:                   "Local QR Demo",
+					Status:                 "draft",
+					PrimaryOwnerUserID:     "usr_local_qr_owner",
+					SourcePacketID:         "local-qr-starter-demo",
+					ExternalEffectsEnabled: false,
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	client, err := NewClient(ClientConfig{BaseURL: server.URL, APIToken: "dev-token"})
+	if err != nil {
+		t.Fatalf("expected client, got error: %v", err)
+	}
+
+	accounts, err := client.ListAccounts(context.Background(), "acct_local_qr_demo", "draft")
+	if err != nil {
+		t.Fatalf("expected accounts, got error: %v", err)
+	}
+	if gotAuth != "Bearer dev-token" {
+		t.Fatalf("expected bearer token header, got %q", gotAuth)
+	}
+	if gotID != "acct_local_qr_demo" {
+		t.Fatalf("expected id filter, got %q", gotID)
+	}
+	if gotStatus != "draft" {
+		t.Fatalf("expected status filter, got %q", gotStatus)
+	}
+	if len(accounts) != 1 || accounts[0].ID != "acct_local_qr_demo" {
+		t.Fatalf("unexpected accounts: %#v", accounts)
+	}
+}
+
+func TestListQRWorkspacesSendsFilters(t *testing.T) {
+	var gotAccountID string
+	var gotAccountServiceID string
+	var gotStatus string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAccountID = r.URL.Query().Get("account_id")
+		gotAccountServiceID = r.URL.Query().Get("account_service_id")
+		gotStatus = r.URL.Query().Get("status")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(qrWorkspacesResponse{
+			Data: []QRWorkspace{
+				{
+					ID:                       "qrw_local_demo",
+					AccountID:                "acct_local_qr_demo",
+					AccountServiceID:         "asvc_local_qr_demo",
+					ServiceID:                "qr-codes",
+					PlanKey:                  "starter",
+					Status:                   "planned",
+					SourcePacketID:           "local-qr-starter-demo",
+					ExternalRedirectsEnabled: false,
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	client, err := NewClient(ClientConfig{BaseURL: server.URL, APIToken: "dev-token"})
+	if err != nil {
+		t.Fatalf("expected client, got error: %v", err)
+	}
+
+	workspaces, err := client.ListQRWorkspaces(context.Background(), map[string]string{
+		"account_id":         "acct_local_qr_demo",
+		"account_service_id": "asvc_local_qr_demo",
+		"status":             "planned",
+	})
+	if err != nil {
+		t.Fatalf("expected QR workspaces, got error: %v", err)
+	}
+	if gotAccountID != "acct_local_qr_demo" {
+		t.Fatalf("expected account_id filter, got %q", gotAccountID)
+	}
+	if gotAccountServiceID != "asvc_local_qr_demo" {
+		t.Fatalf("expected account_service_id filter, got %q", gotAccountServiceID)
+	}
+	if gotStatus != "planned" {
+		t.Fatalf("expected status filter, got %q", gotStatus)
+	}
+	if len(workspaces) != 1 || workspaces[0].ID != "qrw_local_demo" {
+		t.Fatalf("unexpected QR workspaces: %#v", workspaces)
+	}
+}
+
 func TestListServicesReturnsHTTPError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "nope", http.StatusUnauthorized)

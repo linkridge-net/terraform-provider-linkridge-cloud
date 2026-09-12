@@ -90,7 +90,30 @@ func TestValidateRequiredConfig(t *testing.T) {
 
 func TestProviderRegistersServicesDataSource(t *testing.T) {
 	dataSources := (&LinkRidgeCloudProvider{}).DataSources(context.Background())
-	if len(dataSources) != 1 {
-		t.Fatalf("expected 1 data source, got %d", len(dataSources))
+	if len(dataSources) != 3 {
+		t.Fatalf("expected 3 data sources, got %d", len(dataSources))
+	}
+}
+
+func TestStringValueOrNull(t *testing.T) {
+	if !stringValueOrNull("").IsNull() {
+		t.Fatal("expected empty string to become null")
+	}
+	if got := stringValueOrNull("value"); got.ValueString() != "value" {
+		t.Fatalf("unexpected string value: %q", got.ValueString())
+	}
+}
+
+func TestStringFiltersDropsNullAndUnknownValues(t *testing.T) {
+	filters := stringFilters(map[string]types.String{
+		"id":     types.StringValue("acct_local_qr_demo"),
+		"status": types.StringNull(),
+	})
+
+	if filters["id"] != "acct_local_qr_demo" {
+		t.Fatalf("unexpected id filter: %q", filters["id"])
+	}
+	if _, ok := filters["status"]; ok {
+		t.Fatal("expected null status filter to be omitted")
 	}
 }
