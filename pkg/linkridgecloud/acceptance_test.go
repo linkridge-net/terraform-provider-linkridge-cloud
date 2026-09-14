@@ -129,6 +129,20 @@ func TestAccClientReadOnlyDevSurface(t *testing.T) {
 		}
 	}
 
+	qrMutationRequirements, err := client.GetQRMutationRehearsalRequirements(ctx, "qrw_local_growth_demo", "qrm_local_growth_demo_menu_archive")
+	if err != nil {
+		t.Fatalf("get QR mutation rehearsal requirements: %v", err)
+	}
+	if qrMutationRequirements.AccountID != "acct_local_qr_growth_demo" {
+		t.Fatalf("unexpected QR mutation rehearsal account: %q", qrMutationRequirements.AccountID)
+	}
+	if qrMutationRequirements.RehearsalAllowed {
+		t.Fatal("expected QR mutation rehearsal to stay blocked until local approval evidence exists")
+	}
+	if len(qrMutationRequirements.BlockedExternalActions) == 0 {
+		t.Fatal("expected QR mutation rehearsal requirements to include blocked external actions")
+	}
+
 	serviceTokens, err := client.ListServiceTokens(ctx, "acct_local_qr_demo", map[string]string{
 		"status":                 "planned",
 		"secret_material_issued": "false",

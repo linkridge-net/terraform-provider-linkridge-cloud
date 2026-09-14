@@ -32,6 +32,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Read-only `linkridgecloud_qr_import_jobs` data source for safe
   `/v1/qr/workspaces/{workspace_id}/import-jobs` planning and review metadata
   without import execution.
+- Read-only `linkridgecloud_qr_mutation_rehearsal_requirements` data source for
+  safe
+  `/v1/qr/workspaces/{workspace_id}/mutation-requests/{mutation_request_id}/execution-rehearsal-requirements`
+  checklist and guardrail evidence without executing QR mutations, writing
+  tenant QR records, recording billing usage, or enabling hosted redirects.
 - Read-only `linkridgecloud_qr_workspaces` data source for `/v1/qr/workspaces`
   QR service planning records.
 - Read-only `linkridgecloud_provisioning_runs` data source for

@@ -17,22 +17,25 @@ client, and exposes the `/v1/services`, `/v1/accounts`, and
 `/v1/accounts/{account_id}/service-tokens`, `/v1/provisioning-runs`,
 `/v1/review-packets`, `/v1/operator-approvals`, `/v1/audit-events`,
 `/v1/qr/workspaces`, and
-`/v1/qr/workspaces/{workspace_id}/import-jobs` list APIs through Terraform data
-sources. Memberships expose role assignment evidence only; invites expose draft
-delivery metadata only; entitlements expose effective local feature/limit
-evidence only; activation packets and provisioning runs expose review/rehearsal
-evidence only; service-token data is safe metadata only; QR import jobs expose
-plan/review status only; billing export, support case, and review packet data
-sources expose local operator evidence only; audit events expose append-only
-evidence only; operator approvals expose decision evidence only. The provider
+`/v1/qr/workspaces/{workspace_id}/import-jobs` list APIs plus
+`/v1/qr/workspaces/{workspace_id}/mutation-requests/{mutation_request_id}/execution-rehearsal-requirements`
+through Terraform data sources. Memberships expose role assignment evidence
+only; invites expose draft delivery metadata only; entitlements expose effective
+local feature/limit evidence only; activation packets and provisioning runs
+expose review/rehearsal evidence only; service-token data is safe metadata only;
+QR import jobs expose plan/review status only; QR mutation rehearsal
+requirements expose local checklist and guardrail evidence only; billing export,
+support case, and review packet data sources expose local operator evidence
+only; audit events expose append-only evidence only; operator approvals expose
+decision evidence only. The provider
 never returns token secret material, sends invites, creates users, grants
 external access, approves or rejects activation/provisioning, changes
-entitlements, syncs billing, replays audit events, executes imports, creates
-billing records, sends customer notifications, opens external support tickets,
-configures DNS, runs production deploys, or enables hosted redirects. Draft
-resources will stay plan/dev-only until the LinkRidge Cloud API approval gates,
-tenant isolation, and durable audit contracts are ready for customer-visible
-effects.
+entitlements, syncs billing, replays audit events, executes imports, executes QR
+mutations, writes tenant QR records, creates billing records, sends customer
+notifications, opens external support tickets, configures DNS, runs production
+deploys, or enables hosted redirects. Draft resources will stay plan/dev-only
+until the LinkRidge Cloud API approval gates, tenant isolation, and durable
+audit contracts are ready for customer-visible effects.
 
 <!-- badges-start -->
 [![DevRail compliant](https://devrail.dev/images/badge.svg)](https://devrail.dev)
@@ -96,6 +99,11 @@ data "linkridgecloud_qr_import_jobs" "planned" {
   workspace_id      = "qrw_local_demo"
   status            = "planned"
   import_performed  = false
+}
+
+data "linkridgecloud_qr_mutation_rehearsal_requirements" "menu_archive" {
+  workspace_id        = "qrw_local_growth_demo"
+  mutation_request_id = "qrm_local_growth_demo_menu_archive"
 }
 
 data "linkridgecloud_provisioning_runs" "rehearsal" {
@@ -166,7 +174,8 @@ The acceptance check only reads current `/v1` data and asserts the dev guardrail
 remain closed: no service-token secret material, activation/provisioning
 execution, invite delivery, external account access, billing export, support
 notification, operator approval execution, import execution, production deploy,
-or hosted QR redirect is enabled.
+QR mutation execution, tenant QR write, billing usage record, or hosted QR
+redirect is enabled.
 
 ## Usage
 

@@ -150,6 +150,24 @@ type QRImportJob struct {
 	} `json:"import_review_packet"`
 }
 
+// QRMutationRehearsalRequirements is the safe checklist returned before a local/dev QR mutation execution rehearsal.
+type QRMutationRehearsalRequirements struct {
+	Object                           string          `json:"object"`
+	WorkspaceID                      string          `json:"workspace_id"`
+	MutationRequestID                string          `json:"mutation_request_id"`
+	AccountID                        string          `json:"account_id"`
+	ServiceID                        string          `json:"service_id"`
+	RehearsalAllowed                 bool            `json:"rehearsal_allowed"`
+	RehearsalBlockedReason           string          `json:"rehearsal_blocked_reason"`
+	RehearsalRequirementsFingerprint string          `json:"rehearsal_requirements_fingerprint"`
+	ActorBindingFingerprint          string          `json:"actor_binding_fingerprint"`
+	RequiredBodyFields               []string        `json:"required_body_fields"`
+	BlockedExternalActions           []string        `json:"blocked_external_actions"`
+	RehearsalTemplate                json.RawMessage `json:"rehearsal_template"`
+	CurrentRehearsal                 json.RawMessage `json:"current_rehearsal"`
+	Guardrails                       json.RawMessage `json:"guardrails"`
+}
+
 // ServiceToken is the safe metadata subset of the /v1/accounts/{account_id}/service-tokens representation exposed by the provider.
 type ServiceToken struct {
 	ID                     string   `json:"id"`
@@ -713,6 +731,37 @@ func (c *Client) ListQRImportJobs(ctx context.Context, workspaceID string, filte
 	}
 
 	return result.Data, nil
+}
+
+// GetQRMutationRehearsalRequirements returns the read-only local/dev QR mutation rehearsal checklist.
+func (c *Client) GetQRMutationRehearsalRequirements(ctx context.Context, workspaceID string, mutationRequestID string) (*QRMutationRehearsalRequirements, error) {
+	workspaceID = strings.TrimSpace(workspaceID)
+	if workspaceID == "" {
+		return nil, fmt.Errorf("workspace ID is required")
+	}
+	mutationRequestID = strings.TrimSpace(mutationRequestID)
+	if mutationRequestID == "" {
+		return nil, fmt.Errorf("mutation request ID is required")
+	}
+
+	endpoint := c.baseURL + "/v1/qr/workspaces/" + url.PathEscape(workspaceID) + "/mutation-requests/" + url.PathEscape(mutationRequestID) + "/execution-rehearsal-requirements"
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create QR mutation rehearsal requirements request: %w", err)
+	}
+	resp, err := c.doJSON(req, "get QR mutation rehearsal requirements")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var result QRMutationRehearsalRequirements
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode QR mutation rehearsal requirements response: %w", err)
+	}
+
+	return &result, nil
 }
 
 // ListServiceTokens returns safe service token metadata for an account. accountID is required.

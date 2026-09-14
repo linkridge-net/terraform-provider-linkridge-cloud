@@ -1370,6 +1370,94 @@ func TestListOperatorApprovalsSendsFilters(t *testing.T) {
 	}
 }
 
+func TestGetQRMutationRehearsalRequirementsSendsPath(t *testing.T) {
+	var gotAuth string
+	var gotPath string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		gotPath = r.URL.EscapedPath()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"object": "qr_mutation_execution_rehearsal_requirements",
+			"workspace_id": "qrw local/growth demo",
+			"mutation_request_id": "qrm local/growth demo/menu archive",
+			"account_id": "acct_local_qr_growth_demo",
+			"service_id": "qr-codes",
+			"rehearsal_allowed": false,
+			"rehearsal_blocked_reason": "qr_mutation_not_approved_local_only",
+			"rehearsal_requirements_fingerprint": "req_fingerprint_123",
+			"actor_binding_fingerprint": "actor_binding_456",
+			"required_body_fields": [],
+			"blocked_external_actions": [
+				"enable_hosted_qr_redirects",
+				"execute_customer_visible_effect",
+				"record_billable_scan_usage",
+				"write_tenant_qr_record"
+			],
+			"rehearsal_template": null,
+			"current_rehearsal": null,
+			"guardrails": {
+				"local_only": true,
+				"tenant_qr_record_written": false,
+				"hosted_redirects_enabled": false,
+				"external_effect_performed": false,
+				"next_gate": "matthew_explicit_external_effect_approval"
+			}
+		}`))
+	}))
+	defer server.Close()
+
+	client, err := NewClient(ClientConfig{BaseURL: server.URL, APIToken: "dev-token"})
+	if err != nil {
+		t.Fatalf("expected client, got error: %v", err)
+	}
+
+	requirements, err := client.GetQRMutationRehearsalRequirements(
+		context.Background(),
+		"qrw local/growth demo",
+		"qrm local/growth demo/menu archive",
+	)
+	if err != nil {
+		t.Fatalf("expected QR mutation rehearsal requirements, got error: %v", err)
+	}
+	if gotAuth != "Bearer dev-token" {
+		t.Fatalf("expected bearer token header, got %q", gotAuth)
+	}
+	if gotPath != "/v1/qr/workspaces/qrw%20local%2Fgrowth%20demo/mutation-requests/qrm%20local%2Fgrowth%20demo%2Fmenu%20archive/execution-rehearsal-requirements" {
+		t.Fatalf("expected escaped QR mutation rehearsal requirements path, got %q", gotPath)
+	}
+	if requirements.RehearsalAllowed {
+		t.Fatal("expected rehearsal to remain blocked")
+	}
+	if requirements.RehearsalBlockedReason != "qr_mutation_not_approved_local_only" {
+		t.Fatalf("unexpected blocked reason: %q", requirements.RehearsalBlockedReason)
+	}
+	if len(requirements.BlockedExternalActions) != 4 {
+		t.Fatalf("unexpected blocked external actions: %#v", requirements.BlockedExternalActions)
+	}
+	if string(requirements.Guardrails) == "" {
+		t.Fatal("expected guardrail evidence")
+	}
+	if string(requirements.RehearsalTemplate) != "null" {
+		t.Fatalf("expected null rehearsal template while blocked, got %s", requirements.RehearsalTemplate)
+	}
+}
+
+func TestGetQRMutationRehearsalRequirementsRequiresIDs(t *testing.T) {
+	client, err := NewClient(ClientConfig{BaseURL: "https://dev.cloud.linkridge.net", APIToken: "dev-token"})
+	if err != nil {
+		t.Fatalf("expected client, got error: %v", err)
+	}
+
+	if _, err := client.GetQRMutationRehearsalRequirements(context.Background(), "", "qrm_local_demo"); err == nil {
+		t.Fatal("expected missing workspace ID error")
+	}
+	if _, err := client.GetQRMutationRehearsalRequirements(context.Background(), "qrw_local_demo", ""); err == nil {
+		t.Fatal("expected missing mutation request ID error")
+	}
+}
+
 func TestListServicesFormatsProblemError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/problem+json")
