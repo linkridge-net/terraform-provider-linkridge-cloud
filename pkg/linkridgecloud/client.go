@@ -1,0 +1,1059 @@
+// Copyright (c) LinkRidge
+// SPDX-License-Identifier: MPL-2.0
+
+// Package linkridgecloud provides a small API client for LinkRidge Cloud.
+package linkridgecloud
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strings"
+	"time"
+)
+
+// Client is a LinkRidge Cloud HTTP API client.
+type Client struct {
+	baseURL    string
+	apiToken   string //nolint:gosec // API token is user-supplied provider configuration, not a hardcoded credential.
+	httpClient *http.Client
+}
+
+// ClientConfig configures a Client.
+type ClientConfig struct {
+	BaseURL    string
+	APIToken   string //nolint:gosec // API token is user-supplied provider configuration, not a hardcoded credential.
+	HTTPClient *http.Client
+}
+
+// Service is the subset of the /v1/services representation exposed by the provider.
+type Service struct {
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Status      string   `json:"status"`
+	Description string   `json:"description"`
+	Plans       []string `json:"plans"`
+}
+
+// Account is the subset of the /v1/accounts representation exposed by the provider.
+type Account struct {
+	ID                     string `json:"id"`
+	Name                   string `json:"name"`
+	Status                 string `json:"status"`
+	PrimaryOwnerUserID     string `json:"primary_owner_user_id"`
+	BillingCustomerID      string `json:"billing_customer_id"`
+	SourcePacketID         string `json:"source_packet_id"`
+	ExternalEffectsEnabled bool   `json:"external_effects_enabled"`
+}
+
+// AccountMembership is the safe account role-assignment subset exposed by the provider.
+type AccountMembership struct {
+	ID                   string `json:"id"`
+	AccountID            string `json:"account_id"`
+	UserID               string `json:"user_id"`
+	Role                 string `json:"role"`
+	Status               string `json:"status"`
+	InviteDeliveryStatus string `json:"invite_delivery_status"`
+	SourcePacketID       string `json:"source_packet_id"`
+}
+
+// AccountInvite is the safe draft invite subset exposed by the provider.
+type AccountInvite struct {
+	ID                     string   `json:"id"`
+	AccountID              string   `json:"account_id"`
+	Email                  string   `json:"email"`
+	Role                   string   `json:"role"`
+	ServiceScope           []string `json:"service_scope"`
+	Status                 string   `json:"status"`
+	ExpiresAt              string   `json:"expires_at"`
+	CreatedByUserID        string   `json:"created_by_user_id"`
+	CreatedAt              string   `json:"created_at"`
+	UpdatedAt              string   `json:"updated_at"`
+	InviteDeliveryStatus   string   `json:"invite_delivery_status"`
+	ApprovalRequired       string   `json:"approval_required"`
+	SourcePacketID         string   `json:"source_packet_id"`
+	ExternalEffectsEnabled bool     `json:"external_effects_enabled"`
+	Delivery               struct {
+		Status                  string `json:"status"`
+		SentAt                  string `json:"sent_at"`
+		AcceptedAt              string `json:"accepted_at"`
+		ExternalEffectPerformed bool   `json:"external_effect_performed"`
+		ApprovalRequired        string `json:"approval_required"`
+		BlockedReason           string `json:"blocked_reason"`
+	} `json:"delivery"`
+}
+
+// AccountService is the subset of the /v1/accounts/{account_id}/services representation exposed by the provider.
+type AccountService struct {
+	ID                     string `json:"id"`
+	AccountID              string `json:"account_id"`
+	ServiceID              string `json:"service_id"`
+	PlanID                 string `json:"plan_id"`
+	PlanKey                string `json:"plan_key"`
+	Status                 string `json:"status"`
+	ApprovalRequired       bool   `json:"approval_required"`
+	SourcePacketID         string `json:"source_packet_id"`
+	ExternalEffectsEnabled bool   `json:"external_effects_enabled"`
+}
+
+// Entitlement is the safe effective entitlement subset exposed by the provider.
+type Entitlement struct {
+	ID                string          `json:"id"`
+	AccountID         string          `json:"account_id"`
+	AccountServiceID  string          `json:"account_service_id"`
+	ServiceID         string          `json:"service_id"`
+	EntitlementKey    string          `json:"entitlement_key"`
+	Kind              string          `json:"kind"`
+	Value             json.RawMessage `json:"value"`
+	BillingSyncStatus string          `json:"billing_sync_status"`
+	SourcePacketID    string          `json:"source_packet_id"`
+}
+
+// QRWorkspace is the subset of the /v1/qr/workspaces representation exposed by the provider.
+type QRWorkspace struct {
+	ID                       string `json:"id"`
+	AccountID                string `json:"account_id"`
+	AccountServiceID         string `json:"account_service_id"`
+	ServiceID                string `json:"service_id"`
+	PlanKey                  string `json:"plan_key"`
+	Status                   string `json:"status"`
+	SourcePacketID           string `json:"source_packet_id"`
+	ExternalRedirectsEnabled bool   `json:"external_redirects_enabled"`
+}
+
+// QRImportJob is the safe planning subset of the /v1/qr/workspaces/{workspace_id}/import-jobs representation exposed by the provider.
+type QRImportJob struct {
+	ID                       string `json:"id"`
+	AccountID                string `json:"account_id"`
+	AccountServiceID         string `json:"account_service_id"`
+	QRWorkspaceID            string `json:"qr_workspace_id"`
+	ServiceID                string `json:"service_id"`
+	Source                   string `json:"source"`
+	SourceRepository         string `json:"source_repository"`
+	RequestedByUserID        string `json:"requested_by_user_id"`
+	Status                   string `json:"status"`
+	ImportPerformed          bool   `json:"import_performed"`
+	RecordsExamined          int64  `json:"records_examined"`
+	RecordsPlanned           int64  `json:"records_planned"`
+	RecordsRejected          int64  `json:"records_rejected"`
+	SourcePacketID           string `json:"source_packet_id"`
+	ExternalRedirectsEnabled bool   `json:"external_redirects_enabled"`
+	ImportReviewPacket       struct {
+		Status                  string `json:"status"`
+		ApprovalRequired        string `json:"approval_required"`
+		ArtifactReviewed        bool   `json:"artifact_reviewed"`
+		ParserContractChecked   bool   `json:"parser_contract_checked"`
+		ExternalEffectPerformed bool   `json:"external_effect_performed"`
+	} `json:"import_review_packet"`
+}
+
+// QRMutationRehearsalRequirements is the safe checklist returned before a local/dev QR mutation execution rehearsal.
+type QRMutationRehearsalRequirements struct {
+	Object                           string          `json:"object"`
+	WorkspaceID                      string          `json:"workspace_id"`
+	MutationRequestID                string          `json:"mutation_request_id"`
+	AccountID                        string          `json:"account_id"`
+	ServiceID                        string          `json:"service_id"`
+	RehearsalAllowed                 bool            `json:"rehearsal_allowed"`
+	RehearsalBlockedReason           string          `json:"rehearsal_blocked_reason"`
+	RehearsalRequirementsFingerprint string          `json:"rehearsal_requirements_fingerprint"`
+	ActorBindingFingerprint          string          `json:"actor_binding_fingerprint"`
+	RequiredBodyFields               []string        `json:"required_body_fields"`
+	BlockedExternalActions           []string        `json:"blocked_external_actions"`
+	RehearsalTemplate                json.RawMessage `json:"rehearsal_template"`
+	CurrentRehearsal                 json.RawMessage `json:"current_rehearsal"`
+	Guardrails                       json.RawMessage `json:"guardrails"`
+}
+
+// ServiceToken is the safe metadata subset of the /v1/accounts/{account_id}/service-tokens representation exposed by the provider.
+type ServiceToken struct {
+	ID                     string   `json:"id"`
+	AccountID              string   `json:"account_id"`
+	AccountServiceID       string   `json:"account_service_id"`
+	ServiceID              string   `json:"service_id"`
+	CreatedByUserID        string   `json:"created_by_user_id"`
+	Name                   string   `json:"name"`
+	Scopes                 []string `json:"scopes"`
+	Status                 string   `json:"status"`
+	SecretMaterialIssued   bool     `json:"secret_material_issued"`
+	ApprovalRequired       string   `json:"approval_required"`
+	SourcePacketID         string   `json:"source_packet_id"`
+	ExternalEffectsEnabled bool     `json:"external_effects_enabled"`
+}
+
+// ActivationPacket is the safe review subset of the /v1/accounts/{account_id}/services/{account_service_id}/activation-packets representation exposed by the provider.
+type ActivationPacket struct {
+	ID                     string `json:"id"`
+	SourcePacketID         string `json:"source_packet_id"`
+	Status                 string `json:"status"`
+	ActivationPerformed    bool   `json:"activation_performed"`
+	ApprovalRequired       string `json:"approval_required"`
+	ExternalEffectsEnabled bool   `json:"external_effects_enabled"`
+	Account                struct {
+		ID                 string `json:"id"`
+		Name               string `json:"name"`
+		Status             string `json:"status"`
+		PrimaryOwnerUserID string `json:"primary_owner_user_id"`
+	} `json:"account"`
+	AccountService struct {
+		ID        string `json:"id"`
+		AccountID string `json:"account_id"`
+		ServiceID string `json:"service_id"`
+		PlanKey   string `json:"plan_key"`
+		Status    string `json:"status"`
+	} `json:"account_service"`
+	ServiceWorkspace struct {
+		ID        string `json:"id"`
+		AccountID string `json:"account_id"`
+		ServiceID string `json:"service_id"`
+		PlanKey   string `json:"plan_key"`
+		Status    string `json:"status"`
+	} `json:"service_workspace"`
+	OperatorApprovalDecision struct {
+		DecisionID       string   `json:"decision_id"`
+		DecisionState    string   `json:"decision_state"`
+		RequiredApproval string   `json:"required_approval"`
+		ApprovedActions  []string `json:"approved_actions"`
+		BlockedActions   []string `json:"blocked_actions"`
+		Result           string   `json:"result"`
+	} `json:"operator_approval_decision"`
+	LocalProvisioningRun struct {
+		RunID                      string   `json:"run_id"`
+		Status                     string   `json:"status"`
+		PlannedSteps               []string `json:"planned_steps"`
+		LocalRecordsPrepared       []string `json:"local_records_prepared"`
+		ExternalWritesBlocked      []string `json:"external_writes_blocked"`
+		NextRequiredOperatorAction string   `json:"next_required_operator_action"`
+	} `json:"local_provisioning_run"`
+}
+
+// ProvisioningRun is the safe evidence subset of the /v1/provisioning-runs representation exposed by the provider.
+type ProvisioningRun struct {
+	ID                         string                `json:"id"`
+	RunID                      string                `json:"run_id"`
+	AccountID                  string                `json:"account_id"`
+	AccountServiceID           string                `json:"account_service_id"`
+	ServiceID                  string                `json:"service_id"`
+	QRWorkspaceID              string                `json:"qr_workspace_id"`
+	RequestedByUserID          string                `json:"requested_by_user_id"`
+	ApprovedByUserID           string                `json:"approved_by_user_id"`
+	Status                     string                `json:"status"`
+	StartedAt                  string                `json:"started_at"`
+	CompletedAt                string                `json:"completed_at"`
+	PlannedSteps               []string              `json:"planned_steps"`
+	LocalRecordsPrepared       []string              `json:"local_records_prepared"`
+	ExternalWritesBlocked      []string              `json:"external_writes_blocked"`
+	NextRequiredOperatorAction string                `json:"next_required_operator_action"`
+	Result                     ProvisioningRunResult `json:"result"`
+	SourcePacketID             string                `json:"source_packet_id"`
+	ExternalEffectsEnabled     bool                  `json:"external_effects_enabled"`
+}
+
+// BillingExportRequest is the safe billing-review subset exposed by the provider.
+type BillingExportRequest struct {
+	ID                    string   `json:"id"`
+	AccountID             string   `json:"account_id"`
+	AccountServiceID      string   `json:"account_service_id"`
+	ServiceID             string   `json:"service_id"`
+	ScanEventIDs          []string `json:"scan_event_ids"`
+	Quantity              int64    `json:"quantity"`
+	Billable              bool     `json:"billable"`
+	Status                string   `json:"status"`
+	RequestedByUserID     string   `json:"requested_by_user_id"`
+	RequestedAt           string   `json:"requested_at"`
+	ExportedAt            string   `json:"exported_at"`
+	SourcePacketID        string   `json:"source_packet_id"`
+	ExternalExportEnabled bool     `json:"external_export_enabled"`
+	Metadata              struct {
+		BillingCustomerID     string `json:"billing_customer_id"`
+		BillingSubscriptionID string `json:"billing_subscription_id"`
+		ExternalUsageRecordID string `json:"external_usage_record_id"`
+		ExportDestination     string `json:"export_destination"`
+		ApprovalRequired      string `json:"approval_required"`
+		BlockedReason         string `json:"blocked_reason"`
+	} `json:"metadata"`
+}
+
+// SupportCase is the safe support-handoff subset exposed by the provider.
+type SupportCase struct {
+	ID                       string `json:"id"`
+	AccountID                string `json:"account_id"`
+	AccountServiceID         string `json:"account_service_id"`
+	QRWorkspaceID            string `json:"qr_workspace_id"`
+	ServiceID                string `json:"service_id"`
+	TargetType               string `json:"target_type"`
+	TargetID                 string `json:"target_id"`
+	Category                 string `json:"category"`
+	Severity                 string `json:"severity"`
+	Status                   string `json:"status"`
+	Subject                  string `json:"subject"`
+	CreatedByUserID          string `json:"created_by_user_id"`
+	CreatedAt                string `json:"created_at"`
+	ResolvedAt               string `json:"resolved_at"`
+	SourcePacketID           string `json:"source_packet_id"`
+	CustomerVisible          bool   `json:"customer_visible"`
+	ExternalNotificationSent bool   `json:"external_notification_sent"`
+	ExternalTicketCreated    bool   `json:"external_ticket_created"`
+	Metadata                 struct {
+		QRCodeID                 string   `json:"qr_code_id"`
+		Slug                     string   `json:"slug"`
+		CustomerVisible          bool     `json:"customer_visible"`
+		ExternalTicketID         string   `json:"external_ticket_id"`
+		ExternalNotificationSent bool     `json:"external_notification_sent"`
+		EscalationPerformed      bool     `json:"escalation_performed"`
+		ApprovalRequired         string   `json:"approval_required"`
+		BlockedReason            string   `json:"blocked_reason"`
+		BlockedExternalActions   []string `json:"blocked_external_actions"`
+	} `json:"metadata"`
+}
+
+// ReviewPacket is the normalized operator-review evidence exposed by /v1/review-packets.
+type ReviewPacket struct {
+	ID                     string          `json:"id"`
+	AccountID              string          `json:"account_id"`
+	AccountServiceID       string          `json:"account_service_id"`
+	ServiceID              string          `json:"service_id"`
+	PacketType             string          `json:"packet_type"`
+	Status                 string          `json:"status"`
+	ApprovalRequired       string          `json:"approval_required"`
+	RequestedByActor       ReviewActor     `json:"requested_by_actor"`
+	ReviewChecks           json.RawMessage `json:"review_checks"`
+	BlockedExternalActions []string        `json:"blocked_external_actions"`
+	SourcePacketID         string          `json:"source_packet_id"`
+}
+
+// AuditEvent is the safe evidence subset exposed by /v1/audit-events.
+type AuditEvent struct {
+	ID               string          `json:"id"`
+	AccountID        string          `json:"account_id"`
+	AccountServiceID string          `json:"account_service_id"`
+	ServiceID        string          `json:"service_id"`
+	QRWorkspaceID    string          `json:"qr_workspace_id"`
+	QRCodeID         string          `json:"qr_code_id"`
+	Action           string          `json:"action"`
+	TargetType       string          `json:"target_type"`
+	TargetID         string          `json:"target_id"`
+	ActorUserID      string          `json:"actor_user_id"`
+	OccurredAt       string          `json:"occurred_at"`
+	Metadata         json.RawMessage `json:"metadata"`
+	SourcePacketID   string          `json:"source_packet_id"`
+}
+
+// OperatorApproval is the safe operator decision evidence exposed by /v1/operator-approvals.
+type OperatorApproval struct {
+	Status           string   `json:"status"`
+	DecisionID       string   `json:"decision_id"`
+	SourcePacketID   string   `json:"source_packet_id"`
+	AccountID        string   `json:"account_id"`
+	AccountServiceID string   `json:"account_service_id"`
+	ServiceID        string   `json:"service_id"`
+	QRWorkspaceID    string   `json:"qr_workspace_id"`
+	ReviewerUserID   string   `json:"reviewer_user_id"`
+	DecidedAt        string   `json:"decided_at"`
+	DecisionState    string   `json:"decision_state"`
+	RequiredApproval string   `json:"required_approval"`
+	ApprovedActions  []string `json:"approved_actions"`
+	BlockedActions   []string `json:"blocked_actions"`
+	AuditEventAction string   `json:"audit_event_action"`
+	Result           string   `json:"result"`
+}
+
+// ReviewActor is the safe subset of an actor embedded in review evidence.
+type ReviewActor struct {
+	Subject string `json:"subject"`
+	UserID  string `json:"user_id"`
+}
+
+// ProvisioningRunResult supports file-backed string results and Postgres object results.
+type ProvisioningRunResult struct {
+	Result                string   `json:"result"`
+	ExternalWritesBlocked []string `json:"external_writes_blocked"`
+}
+
+// UnmarshalJSON decodes both "not_executed" and {"result":"not_executed"} shapes.
+func (r *ProvisioningRunResult) UnmarshalJSON(data []byte) error {
+	var result string
+	if err := json.Unmarshal(data, &result); err == nil {
+		r.Result = result
+		return nil
+	}
+
+	var payload struct {
+		Result                string   `json:"result"`
+		ExternalWritesBlocked []string `json:"external_writes_blocked"`
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return err
+	}
+	r.Result = payload.Result
+	r.ExternalWritesBlocked = payload.ExternalWritesBlocked
+	return nil
+}
+
+type servicesResponse struct {
+	Data []Service `json:"data"`
+}
+
+type accountsResponse struct {
+	Data []Account `json:"data"`
+}
+
+type accountMembershipsResponse struct {
+	Data []AccountMembership `json:"data"`
+}
+
+type accountInvitesResponse struct {
+	Data []AccountInvite `json:"data"`
+}
+
+type accountServicesResponse struct {
+	Data []AccountService `json:"data"`
+}
+
+type entitlementsResponse struct {
+	Data []Entitlement `json:"data"`
+}
+
+type qrWorkspacesResponse struct {
+	Data []QRWorkspace `json:"data"`
+}
+
+type qrImportJobsResponse struct {
+	Data []QRImportJob `json:"data"`
+}
+
+type serviceTokensResponse struct {
+	Data []ServiceToken `json:"data"`
+}
+
+type activationPacketsResponse struct {
+	Data []ActivationPacket `json:"data"`
+}
+
+type provisioningRunsResponse struct {
+	Data []ProvisioningRun `json:"data"`
+}
+
+type billingExportRequestsResponse struct {
+	Data []BillingExportRequest `json:"data"`
+}
+
+type supportCasesResponse struct {
+	Data []SupportCase `json:"data"`
+}
+
+type reviewPacketsResponse struct {
+	Data []ReviewPacket `json:"data"`
+}
+
+type auditEventsResponse struct {
+	Data []AuditEvent `json:"data"`
+}
+
+type operatorApprovalsResponse struct {
+	Data []OperatorApproval `json:"data"`
+}
+
+type problemDetails struct {
+	Type   string `json:"type"`
+	Title  string `json:"title"`
+	Status int    `json:"status"`
+	Detail string `json:"detail"`
+	Code   string `json:"code"`
+}
+
+// NewClient creates a LinkRidge Cloud client.
+func NewClient(cfg ClientConfig) (*Client, error) {
+	baseURLValue := strings.TrimSpace(cfg.BaseURL)
+	if baseURLValue == "" {
+		return nil, fmt.Errorf("base URL is required")
+	}
+	apiToken := strings.TrimSpace(cfg.APIToken)
+	if apiToken == "" {
+		return nil, fmt.Errorf("API token is required")
+	}
+
+	baseURL, err := url.Parse(strings.TrimRight(baseURLValue, "/"))
+	if err != nil {
+		return nil, fmt.Errorf("parse base URL: %w", err)
+	}
+	if baseURL.Scheme == "" || baseURL.Host == "" {
+		return nil, fmt.Errorf("base URL must include scheme and host")
+	}
+
+	httpClient := cfg.HTTPClient
+	if httpClient == nil {
+		httpClient = &http.Client{Timeout: 30 * time.Second}
+	}
+
+	return &Client{
+		baseURL:    baseURL.String(),
+		apiToken:   apiToken,
+		httpClient: httpClient,
+	}, nil
+}
+
+// BaseURL returns the configured API base URL.
+func (c *Client) BaseURL() string {
+	return c.baseURL
+}
+
+// ListServices returns LinkRidge Cloud services. id is optional.
+func (c *Client) ListServices(ctx context.Context, id string) ([]Service, error) {
+	endpoint := c.listEndpoint("/v1/services", map[string]string{"id": id})
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create services request: %w", err)
+	}
+	resp, err := c.doJSON(req, "list services")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var result servicesResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode services response: %w", err)
+	}
+	if result.Data == nil {
+		return []Service{}, nil
+	}
+
+	return result.Data, nil
+}
+
+// ListAccounts returns LinkRidge Cloud account planning records. id and status are optional.
+func (c *Client) ListAccounts(ctx context.Context, id string, status string) ([]Account, error) {
+	endpoint := c.listEndpoint("/v1/accounts", map[string]string{
+		"id":     id,
+		"status": status,
+	})
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create accounts request: %w", err)
+	}
+	resp, err := c.doJSON(req, "list accounts")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var result accountsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode accounts response: %w", err)
+	}
+	if result.Data == nil {
+		return []Account{}, nil
+	}
+
+	return result.Data, nil
+}
+
+// ListAccountMemberships returns role assignments for an account. accountID is required.
+func (c *Client) ListAccountMemberships(ctx context.Context, accountID string, filters map[string]string) ([]AccountMembership, error) {
+	accountID = strings.TrimSpace(accountID)
+	if accountID == "" {
+		return nil, fmt.Errorf("account ID is required")
+	}
+
+	endpoint := c.listEndpoint("/v1/accounts/"+url.PathEscape(accountID)+"/memberships", filters)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create account memberships request: %w", err)
+	}
+	resp, err := c.doJSON(req, "list account memberships")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var result accountMembershipsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode account memberships response: %w", err)
+	}
+	if result.Data == nil {
+		return []AccountMembership{}, nil
+	}
+
+	return result.Data, nil
+}
+
+// ListAccountInvites returns draft invite packets for an account. accountID is required.
+func (c *Client) ListAccountInvites(ctx context.Context, accountID string, filters map[string]string) ([]AccountInvite, error) {
+	accountID = strings.TrimSpace(accountID)
+	if accountID == "" {
+		return nil, fmt.Errorf("account ID is required")
+	}
+
+	endpoint := c.listEndpoint("/v1/accounts/"+url.PathEscape(accountID)+"/invites", filters)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create account invites request: %w", err)
+	}
+	resp, err := c.doJSON(req, "list account invites")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var result accountInvitesResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode account invites response: %w", err)
+	}
+	if result.Data == nil {
+		return []AccountInvite{}, nil
+	}
+
+	return result.Data, nil
+}
+
+// ListAccountServices returns service planning records for an account. accountID is required.
+func (c *Client) ListAccountServices(ctx context.Context, accountID string, filters map[string]string) ([]AccountService, error) {
+	accountID = strings.TrimSpace(accountID)
+	if accountID == "" {
+		return nil, fmt.Errorf("account ID is required")
+	}
+
+	endpoint := c.listEndpoint("/v1/accounts/"+url.PathEscape(accountID)+"/services", filters)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create account services request: %w", err)
+	}
+	resp, err := c.doJSON(req, "list account services")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var result accountServicesResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode account services response: %w", err)
+	}
+	if result.Data == nil {
+		return []AccountService{}, nil
+	}
+
+	return result.Data, nil
+}
+
+// ListEntitlements returns effective entitlements for an account service. accountID and accountServiceID are required.
+func (c *Client) ListEntitlements(ctx context.Context, accountID string, accountServiceID string, filters map[string]string) ([]Entitlement, error) {
+	accountID = strings.TrimSpace(accountID)
+	if accountID == "" {
+		return nil, fmt.Errorf("account ID is required")
+	}
+	accountServiceID = strings.TrimSpace(accountServiceID)
+	if accountServiceID == "" {
+		return nil, fmt.Errorf("account service ID is required")
+	}
+
+	endpoint := c.listEndpoint("/v1/accounts/"+url.PathEscape(accountID)+"/services/"+url.PathEscape(accountServiceID)+"/entitlements", filters)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create entitlements request: %w", err)
+	}
+	resp, err := c.doJSON(req, "list entitlements")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var result entitlementsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode entitlements response: %w", err)
+	}
+	if result.Data == nil {
+		return []Entitlement{}, nil
+	}
+
+	return result.Data, nil
+}
+
+// ListQRWorkspaces returns LinkRidge Cloud QR workspaces. filters are optional.
+func (c *Client) ListQRWorkspaces(ctx context.Context, filters map[string]string) ([]QRWorkspace, error) {
+	endpoint := c.listEndpoint("/v1/qr/workspaces", filters)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create QR workspaces request: %w", err)
+	}
+	resp, err := c.doJSON(req, "list QR workspaces")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var result qrWorkspacesResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode QR workspaces response: %w", err)
+	}
+	if result.Data == nil {
+		return []QRWorkspace{}, nil
+	}
+
+	return result.Data, nil
+}
+
+// ListQRImportJobs returns safe QR import planning records for a workspace. workspaceID is required.
+func (c *Client) ListQRImportJobs(ctx context.Context, workspaceID string, filters map[string]string) ([]QRImportJob, error) {
+	workspaceID = strings.TrimSpace(workspaceID)
+	if workspaceID == "" {
+		return nil, fmt.Errorf("workspace ID is required")
+	}
+
+	endpoint := c.listEndpoint("/v1/qr/workspaces/"+url.PathEscape(workspaceID)+"/import-jobs", filters)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create QR import jobs request: %w", err)
+	}
+	resp, err := c.doJSON(req, "list QR import jobs")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var result qrImportJobsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode QR import jobs response: %w", err)
+	}
+	if result.Data == nil {
+		return []QRImportJob{}, nil
+	}
+
+	return result.Data, nil
+}
+
+// GetQRMutationRehearsalRequirements returns the read-only local/dev QR mutation rehearsal checklist.
+func (c *Client) GetQRMutationRehearsalRequirements(ctx context.Context, workspaceID string, mutationRequestID string) (*QRMutationRehearsalRequirements, error) {
+	workspaceID = strings.TrimSpace(workspaceID)
+	if workspaceID == "" {
+		return nil, fmt.Errorf("workspace ID is required")
+	}
+	mutationRequestID = strings.TrimSpace(mutationRequestID)
+	if mutationRequestID == "" {
+		return nil, fmt.Errorf("mutation request ID is required")
+	}
+
+	endpoint := c.baseURL + "/v1/qr/workspaces/" + url.PathEscape(workspaceID) + "/mutation-requests/" + url.PathEscape(mutationRequestID) + "/execution-rehearsal-requirements"
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create QR mutation rehearsal requirements request: %w", err)
+	}
+	resp, err := c.doJSON(req, "get QR mutation rehearsal requirements")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var result QRMutationRehearsalRequirements
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode QR mutation rehearsal requirements response: %w", err)
+	}
+
+	return &result, nil
+}
+
+// ListServiceTokens returns safe service token metadata for an account. accountID is required.
+func (c *Client) ListServiceTokens(ctx context.Context, accountID string, filters map[string]string) ([]ServiceToken, error) {
+	accountID = strings.TrimSpace(accountID)
+	if accountID == "" {
+		return nil, fmt.Errorf("account ID is required")
+	}
+
+	endpoint := c.listEndpoint("/v1/accounts/"+url.PathEscape(accountID)+"/service-tokens", filters)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create service tokens request: %w", err)
+	}
+	resp, err := c.doJSON(req, "list service tokens")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var result serviceTokensResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode service tokens response: %w", err)
+	}
+	if result.Data == nil {
+		return []ServiceToken{}, nil
+	}
+
+	return result.Data, nil
+}
+
+// ListActivationPackets returns safe activation review metadata for an account service. accountID and accountServiceID are required.
+func (c *Client) ListActivationPackets(ctx context.Context, accountID string, accountServiceID string, filters map[string]string) ([]ActivationPacket, error) {
+	accountID = strings.TrimSpace(accountID)
+	if accountID == "" {
+		return nil, fmt.Errorf("account ID is required")
+	}
+	accountServiceID = strings.TrimSpace(accountServiceID)
+	if accountServiceID == "" {
+		return nil, fmt.Errorf("account service ID is required")
+	}
+
+	endpoint := c.listEndpoint("/v1/accounts/"+url.PathEscape(accountID)+"/services/"+url.PathEscape(accountServiceID)+"/activation-packets", filters)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create activation packets request: %w", err)
+	}
+	resp, err := c.doJSON(req, "list activation packets")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var result activationPacketsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode activation packets response: %w", err)
+	}
+	if result.Data == nil {
+		return []ActivationPacket{}, nil
+	}
+
+	return result.Data, nil
+}
+
+// ListProvisioningRuns returns safe provisioning rehearsal and execution evidence. filters are optional.
+func (c *Client) ListProvisioningRuns(ctx context.Context, filters map[string]string) ([]ProvisioningRun, error) {
+	endpoint := c.listEndpoint("/v1/provisioning-runs", filters)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create provisioning runs request: %w", err)
+	}
+	resp, err := c.doJSON(req, "list provisioning runs")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var result provisioningRunsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode provisioning runs response: %w", err)
+	}
+	if result.Data == nil {
+		return []ProvisioningRun{}, nil
+	}
+
+	return result.Data, nil
+}
+
+// ListBillingExportRequests returns safe billing export review metadata. accountID and accountServiceID are required.
+func (c *Client) ListBillingExportRequests(ctx context.Context, accountID string, accountServiceID string, filters map[string]string) ([]BillingExportRequest, error) {
+	accountID = strings.TrimSpace(accountID)
+	if accountID == "" {
+		return nil, fmt.Errorf("account ID is required")
+	}
+	accountServiceID = strings.TrimSpace(accountServiceID)
+	if accountServiceID == "" {
+		return nil, fmt.Errorf("account service ID is required")
+	}
+
+	endpoint := c.listEndpoint("/v1/accounts/"+url.PathEscape(accountID)+"/services/"+url.PathEscape(accountServiceID)+"/billing-export-requests", filters)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create billing export requests request: %w", err)
+	}
+	resp, err := c.doJSON(req, "list billing export requests")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var result billingExportRequestsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode billing export requests response: %w", err)
+	}
+	if result.Data == nil {
+		return []BillingExportRequest{}, nil
+	}
+
+	return result.Data, nil
+}
+
+// ListSupportCases returns safe support handoff metadata. accountID and accountServiceID are required.
+func (c *Client) ListSupportCases(ctx context.Context, accountID string, accountServiceID string, filters map[string]string) ([]SupportCase, error) {
+	accountID = strings.TrimSpace(accountID)
+	if accountID == "" {
+		return nil, fmt.Errorf("account ID is required")
+	}
+	accountServiceID = strings.TrimSpace(accountServiceID)
+	if accountServiceID == "" {
+		return nil, fmt.Errorf("account service ID is required")
+	}
+
+	endpoint := c.listEndpoint("/v1/accounts/"+url.PathEscape(accountID)+"/services/"+url.PathEscape(accountServiceID)+"/support-cases", filters)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create support cases request: %w", err)
+	}
+	resp, err := c.doJSON(req, "list support cases")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var result supportCasesResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode support cases response: %w", err)
+	}
+	if result.Data == nil {
+		return []SupportCase{}, nil
+	}
+
+	return result.Data, nil
+}
+
+// ListReviewPackets returns normalized internal review packets for approval-gated work. filters are optional.
+func (c *Client) ListReviewPackets(ctx context.Context, filters map[string]string) ([]ReviewPacket, error) {
+	endpoint := c.listEndpoint("/v1/review-packets", filters)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create review packets request: %w", err)
+	}
+	resp, err := c.doJSON(req, "list review packets")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var result reviewPacketsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode review packets response: %w", err)
+	}
+	if result.Data == nil {
+		return []ReviewPacket{}, nil
+	}
+
+	return result.Data, nil
+}
+
+// ListAuditEvents returns append-only platform and service audit evidence. filters are optional.
+func (c *Client) ListAuditEvents(ctx context.Context, filters map[string]string) ([]AuditEvent, error) {
+	endpoint := c.listEndpoint("/v1/audit-events", filters)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create audit events request: %w", err)
+	}
+	resp, err := c.doJSON(req, "list audit events")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var result auditEventsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode audit events response: %w", err)
+	}
+	if result.Data == nil {
+		return []AuditEvent{}, nil
+	}
+
+	return result.Data, nil
+}
+
+// ListOperatorApprovals returns safe operator decision evidence. filters are optional.
+func (c *Client) ListOperatorApprovals(ctx context.Context, filters map[string]string) ([]OperatorApproval, error) {
+	endpoint := c.listEndpoint("/v1/operator-approvals", filters)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create operator approvals request: %w", err)
+	}
+	resp, err := c.doJSON(req, "list operator approvals")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var result operatorApprovalsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode operator approvals response: %w", err)
+	}
+	if result.Data == nil {
+		return []OperatorApproval{}, nil
+	}
+
+	return result.Data, nil
+}
+
+func (c *Client) listEndpoint(path string, filters map[string]string) string {
+	endpoint := c.baseURL + path
+	query := url.Values{}
+	for key, value := range filters {
+		if strings.TrimSpace(value) != "" {
+			query.Set(key, value)
+		}
+	}
+	if len(query) > 0 {
+		endpoint += "?" + query.Encode()
+	}
+	return endpoint
+}
+
+func (c *Client) doJSON(req *http.Request, action string) (*http.Response, error) {
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Authorization", "Bearer "+c.apiToken)
+	req.Header.Set("User-Agent", "terraform-provider-linkridge-cloud")
+
+	resp, err := c.httpClient.Do(req) //nolint:gosec // URL is provider-configured and parsed before use.
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", action, err)
+	}
+
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		defer func() { _ = resp.Body.Close() }()
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return nil, fmt.Errorf("%s returned HTTP %d: %s", action, resp.StatusCode, formatErrorBody(body))
+	}
+
+	return resp, nil
+}
+
+func formatErrorBody(body []byte) string {
+	trimmed := strings.TrimSpace(string(body))
+	if trimmed == "" {
+		return "empty response body"
+	}
+
+	var problem problemDetails
+	if err := json.Unmarshal(body, &problem); err == nil {
+		parts := make([]string, 0, 4)
+		if problem.Title != "" {
+			parts = append(parts, problem.Title)
+		}
+		if problem.Code != "" {
+			parts = append(parts, "code="+problem.Code)
+		}
+		if problem.Detail != "" {
+			parts = append(parts, problem.Detail)
+		}
+		if problem.Type != "" {
+			parts = append(parts, "type="+problem.Type)
+		}
+		if len(parts) > 0 {
+			return strings.Join(parts, "; ")
+		}
+	}
+
+	return trimmed
+}

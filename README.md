@@ -1,22 +1,181 @@
-# Project Name
+# Terraform Provider for LinkRidge Cloud
 
 > Built with [DevRail](https://devrail.dev) `v1` standards. See [STABILITY.md](STABILITY.md) for component status.
 
-<!-- TODO: Replace with your project name and one-line description -->
+Terraform provider for the LinkRidge Cloud control-plane API.
 
-A new project bootstrapped from the [DevRail GitHub template](https://github.com/devrail-dev/github-repo-template).
+The first provider slice is intentionally read-only: it configures a
+Terraform Plugin Framework provider, creates a small LinkRidge Cloud API
+client, and exposes the `/v1/services`, `/v1/accounts`, and
+`/v1/accounts/{account_id}/memberships`,
+`/v1/accounts/{account_id}/invites`,
+`/v1/accounts/{account_id}/services`,
+`/v1/accounts/{account_id}/services/{account_service_id}/entitlements`,
+`/v1/accounts/{account_id}/services/{account_service_id}/activation-packets`,
+`/v1/accounts/{account_id}/services/{account_service_id}/billing-export-requests`,
+`/v1/accounts/{account_id}/services/{account_service_id}/support-cases`,
+`/v1/accounts/{account_id}/service-tokens`, `/v1/provisioning-runs`,
+`/v1/review-packets`, `/v1/operator-approvals`, `/v1/audit-events`,
+`/v1/qr/workspaces`, and
+`/v1/qr/workspaces/{workspace_id}/import-jobs` list APIs plus
+`/v1/qr/workspaces/{workspace_id}/mutation-requests/{mutation_request_id}/execution-rehearsal-requirements`
+through Terraform data sources. Memberships expose role assignment evidence
+only; invites expose draft delivery metadata only; entitlements expose effective
+local feature/limit evidence only; activation packets and provisioning runs
+expose review/rehearsal evidence only; service-token data is safe metadata only;
+QR import jobs expose plan/review status only; QR mutation rehearsal
+requirements expose local checklist and guardrail evidence only; billing export,
+support case, and review packet data sources expose local operator evidence
+only; audit events expose append-only evidence only; operator approvals expose
+decision evidence only. The provider
+never returns token secret material, sends invites, creates users, grants
+external access, approves or rejects activation/provisioning, changes
+entitlements, syncs billing, replays audit events, executes imports, executes QR
+mutations, writes tenant QR records, creates billing records, sends customer
+notifications, opens external support tickets, configures DNS, runs production
+deploys, or enables hosted redirects. Draft resources will stay plan/dev-only
+until the LinkRidge Cloud API approval gates, tenant isolation, and durable
+audit contracts are ready for customer-visible effects.
 
 <!-- badges-start -->
-<!-- TODO: Add CI status badge: ![Lint](https://github.com/OWNER/REPO/actions/workflows/lint.yml/badge.svg) -->
 [![DevRail compliant](https://devrail.dev/images/badge.svg)](https://devrail.dev)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 <!-- badges-end -->
 
 ## Quick Start
 
-1. Click **"Use this template"** on [github.com/devrail-dev/github-repo-template](https://github.com/devrail-dev/github-repo-template) to create a new repository.
-2. Edit `.devrail.yml` and uncomment the languages used in your project.
-3. Run `make install-hooks` to set up pre-commit hooks.
+Configure the provider with explicit attributes or environment variables:
+
+```hcl
+provider "linkridgecloud" {
+  base_url  = "https://dev.cloud.linkridge.net"
+  api_token = var.linkridge_cloud_api_token
+}
+
+data "linkridgecloud_services" "qr" {
+  id = "qr-codes"
+}
+
+data "linkridgecloud_accounts" "draft" {
+  status = "draft"
+}
+
+data "linkridgecloud_account_memberships" "owners" {
+  account_id = "acct_local_qr_demo"
+  role       = "owner"
+  status     = "planned"
+}
+
+data "linkridgecloud_account_invites" "draft_editors" {
+  account_id             = "acct_local_qr_demo"
+  role                   = "editor"
+  status                 = "draft"
+  invite_delivery_status = "not_sent"
+}
+
+data "linkridgecloud_account_services" "planned" {
+  account_id = "acct_local_qr_demo"
+  status     = "planned"
+}
+
+data "linkridgecloud_entitlements" "active_qr_codes" {
+  account_id         = "acct_local_qr_demo"
+  account_service_id = "asvc_local_qr_demo"
+  entitlement_key    = "active_qr_codes"
+}
+
+data "linkridgecloud_activation_packets" "planned" {
+  account_id         = "acct_local_qr_demo"
+  account_service_id = "asvc_local_qr_demo"
+  status             = "blocked_pending_matthew_approval"
+}
+
+data "linkridgecloud_qr_workspaces" "planned" {
+  account_id = "acct_local_qr_demo"
+  status     = "planned"
+}
+
+data "linkridgecloud_qr_import_jobs" "planned" {
+  workspace_id      = "qrw_local_demo"
+  status            = "planned"
+  import_performed  = false
+}
+
+data "linkridgecloud_qr_mutation_rehearsal_requirements" "menu_archive" {
+  workspace_id        = "qrw_local_growth_demo"
+  mutation_request_id = "qrm_local_growth_demo_menu_archive"
+}
+
+data "linkridgecloud_provisioning_runs" "rehearsal" {
+  account_service_id = "asvc_local_qr_demo"
+  status             = "rehearsal_only"
+}
+
+data "linkridgecloud_billing_export_requests" "blocked" {
+  account_id         = "acct_local_qr_demo"
+  account_service_id = "asvc_local_qr_demo"
+  status             = "blocked"
+}
+
+data "linkridgecloud_support_cases" "blocked_import_review" {
+  account_id         = "acct_local_qr_demo"
+  account_service_id = "asvc_local_qr_demo"
+  category           = "import_review"
+  status             = "blocked"
+}
+
+data "linkridgecloud_review_packets" "service_token" {
+  account_id  = "acct_local_qr_demo"
+  packet_type = "service_token"
+  status      = "blocked_pending_matthew_approval"
+}
+
+data "linkridgecloud_operator_approvals" "blocked" {
+  account_id        = "acct_local_qr_demo"
+  decision_state    = "blocked"
+  required_approval = "matthew"
+}
+
+data "linkridgecloud_audit_events" "service_token_prepare" {
+  account_id       = "acct_local_qr_demo"
+  action           = "service_token.prepare"
+  source_packet_id = "local-qr-starter-demo"
+}
+
+data "linkridgecloud_service_tokens" "planned" {
+  account_id             = "acct_local_qr_demo"
+  status                 = "planned"
+  secret_material_issued = false
+}
+```
+
+Environment variable fallback:
+
+```shell
+export LINKRIDGE_CLOUD_BASE_URL="https://dev.cloud.linkridge.net"
+export LINKRIDGE_CLOUD_API_TOKEN="..."
+```
+
+Never commit token values. The provider only sends the token as a bearer
+credential to the configured LinkRidge Cloud API.
+
+### Read-only dev acceptance checks
+
+The normal Go test suite never calls the network. To verify the provider client
+against the dev control-plane API, opt in explicitly:
+
+```shell
+export LINKRIDGE_CLOUD_BASE_URL="https://dev.cloud.linkridge.net"
+export LINKRIDGE_CLOUD_API_TOKEN="..."
+LINKRIDGE_CLOUD_ACC=1 go test ./pkg/linkridgecloud -run TestAccClientReadOnlyDevSurface -count=1
+```
+
+The acceptance check only reads current `/v1` data and asserts the dev guardrails
+remain closed: no service-token secret material, activation/provisioning
+execution, invite delivery, external account access, billing export, support
+notification, operator approval execution, import execution, production deploy,
+QR mutation execution, tenant QR write, billing usage record, or hosted QR
+redirect is enabled.
 
 ## Usage
 
@@ -43,79 +202,16 @@ All targets except `help` and `install-hooks` delegate to the dev-toolchain Dock
 
 Every DevRail-managed repository includes a `.devrail.yml` file at the repo root. This file declares the project's languages and settings, and is read by the Makefile, CI pipelines, and AI agents.
 
-```yaml
-languages:
-  - python
-  - bash
-
-fail_fast: false
-log_format: json
-```
-
-Uncomment the languages used in your project and configure settings as needed.
-
-### Branch Protection
-
-To enforce CI checks before merging pull requests:
-
-1. Go to **Settings > Branches > Branch protection rules**
-2. Add a rule for the `main` branch
-3. Enable **"Require status checks to pass before merging"**
-4. Select all five status checks: `lint`, `format`, `security`, `test`, `docs`
-
-### GitHub Template Repository
-
-This repo is configured as a GitHub template. To enable this on your fork:
-
-1. Go to **Settings > General**
-2. Check **"Template repository"** under the repository name section
-3. Users will then see a **"Use this template"** button on the repo page
+This repository currently enables the Go DevRail checks. Terraform examples are
+kept under `examples/`; Terraform-specific DevRail checks can be enabled once
+the shared DevRail toolchain image includes the matching Terraform security
+scanner.
 
 ## Contributing
 
 See [DEVELOPMENT.md](DEVELOPMENT.md) for development standards, coding conventions, and contribution guidelines.
 
-To add a new language ecosystem to DevRail, see the [Contributing to DevRail](https://github.com/devrail-dev/devrail-standards/blob/main/standards/contributing.md) guide.
-
 This project follows [Conventional Commits](https://www.conventionalcommits.org/). All commits use the `type(scope): description` format.
-
-## Retrofit Existing Project
-
-To add DevRail standards to an existing GitHub repository:
-
-### Step 1: Core Configuration
-
-- [ ] Copy `.devrail.yml` and uncomment your project's languages
-- [ ] Copy `.editorconfig`
-- [ ] Merge `.gitignore` patterns into your existing .gitignore
-- [ ] Copy `Makefile` (or merge targets if you have an existing Makefile)
-
-### Step 2: Pre-Commit Hooks
-
-- [ ] Copy `.pre-commit-config.yaml` and uncomment hooks for your languages
-- [ ] Run `make install-hooks`
-
-### Step 3: Agent Instruction Files
-
-- [ ] Copy `DEVELOPMENT.md`, `CLAUDE.md`, `AGENTS.md`, `.cursorrules`
-- [ ] Copy `.opencode/agents.yaml`
-
-### Step 4: CI Workflows
-
-- [ ] Copy `.github/workflows/` directory (lint.yml, format.yml, security.yml, test.yml, docs.yml)
-- [ ] Configure branch protection: Settings > Branches > Require status checks
-
-### Step 5: Project Documentation
-
-- [ ] Copy `.github/PULL_REQUEST_TEMPLATE.md`
-- [ ] Copy `.github/CODEOWNERS` and configure for your team
-- [ ] Copy `CHANGELOG.md` if not already present
-
-### Step 6: Verify
-
-- [ ] Run `make check` and fix any issues
-- [ ] Create a test commit to verify pre-commit hooks fire
-- [ ] Create a test PR to verify CI workflows run
 
 ## License
 
